@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"baseUrl": ".",
+		"declaration": true,
+		"esModuleInterop": true,
+		"lib": ["ES2023"],
+		"module": "NodeNext",
+		"outDir": "dist",
+		"resolveJsonModule": true,
+		"strict": true,
+		"target": "ES2023"
+	},
+	"include": ["./src/**/*.ts"],
+	"exclude": ["./dist"]
+}

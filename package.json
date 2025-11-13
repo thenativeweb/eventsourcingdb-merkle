@@ -1,0 +1,47 @@
+{
+	"name": "eventsourcingdb-merkle",
+	"version": "0.0.0",
+	"description": "Merkle tree utilities for EventSourcingDB backups.",
+	"author": {
+		"name": "the native web GmbH",
+		"email": "hello@thenativeweb.io"
+	},
+	"bin": "./dist/index.js",
+	"type": "module",
+	"oclif": {
+		"bin": "eventsourcingdb-merkle",
+		"dirname": "eventsourcingdb-merkle",
+		"commands": "./dist/commands"
+	},
+	"dependencies": {
+		"@oclif/core": "4.0.36"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.3.1",
+		"@types/node": "24.9.1",
+		"tsup": "8.5.0",
+		"tsx": "4.20.6",
+		"typescript": "5.9.3"
+	},
+	"scripts": {
+		"analyze": "npx tsc --noEmit && npx biome check --error-on-warnings .",
+		"build": "npx tsc --noEmit && npx tsup --clean --format esm --minify --out-dir=./dist/ ./src/index.ts ./src/commands/*.ts ./src/lib/*.ts",
+		"format": "npx biome check --write .",
+		"pretest": "npm run build",
+		"qa": "npm run analyze && npm run test",
+		"test": "node --test --import tsx \"./src/**/*.test.ts\""
+	},
+	"repository": {
+		"type": "git",
+		"url": "git://github.com/thenativeweb/eventsourcingdb-merkle.git"
+	},
+	"license": "MIT",
+	"keywords": [
+		"eventsourcingdb",
+		"esdb",
+		"merkle",
+		"merkle-tree",
+		"backup",
+		"verification"
+	]
+}
