@@ -1,0 +1,8 @@
+.github/
+src/
+test-fixtures/
+
+.gitignore
+.npmignore
+biome.json
+tsconfig.json
