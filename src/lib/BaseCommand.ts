@@ -5,7 +5,6 @@ export default abstract class BaseCommand extends Command {
 		const errorName = error.constructor.name;
 
 		// Check if it's a RequiredArgsError or NonExistentFlagsError
-		// biome-ignore lint/security/noSecrets: These are class names, not secrets
 		if (errorName === 'RequiredArgsError' || errorName === 'NonExistentFlagsError') {
 			// Remove the "See more help with --help" line from oclif
 			const lines = error.message.split('\n');

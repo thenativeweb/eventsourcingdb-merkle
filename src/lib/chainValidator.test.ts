@@ -3,7 +3,6 @@ import { describe, it } from 'node:test';
 import { readBackupFile } from './backupReader.js';
 import { validateChain } from './chainValidator.js';
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('validateChain', () => {
 	it('validates a correct chain', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');

@@ -2,7 +2,6 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 import { buildMerkleRoot, generateMerkleProof, verifyMerkleProof } from './merkleTree.js';
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('buildMerkleRoot', () => {
 	it('throws error for empty list', () => {
 		assert.throws(() => buildMerkleRoot([]), {
@@ -42,7 +41,6 @@ describe('buildMerkleRoot', () => {
 	});
 });
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('generateMerkleProof', () => {
 	it('throws error if target hash not found', () => {
 		const hashes = ['hash1', 'hash2', 'hash3'];
@@ -90,7 +88,6 @@ describe('generateMerkleProof', () => {
 	});
 });
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('verifyMerkleProof', () => {
 	it('verifies valid proof for single element', () => {
 		const hashes = ['hash1'];
