@@ -2,7 +2,6 @@ import assert from 'node:assert';
 import { describe, it } from 'node:test';
 import { findEventById, readBackupFile } from './backupReader.js';
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('readBackupFile', () => {
 	it('reads a backup file with multiple events', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');
@@ -37,7 +36,6 @@ describe('readBackupFile', () => {
 	});
 });
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('findEventById', () => {
 	it('finds an event by its ID', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');

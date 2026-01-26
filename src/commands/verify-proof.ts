@@ -7,7 +7,6 @@ export default class VerifyProof extends BaseCommand {
 	static override description = 'Verify a Merkle proof';
 
 	static override examples = [
-		// biome-ignore lint/security/noSecrets: This is an example command, not a secret
 		'<%= config.bin %> <%= command.id %> \'{"eventId":"42","eventHash":"...","siblingHashes":[],"merkleRoot":"..."}\'',
 		'<%= config.bin %> <%= command.id %> proof.json',
 	];
@@ -38,7 +37,6 @@ export default class VerifyProof extends BaseCommand {
 			// Validate proof structure
 			if (!proof.eventHash || !proof.merkleRoot || !proof.siblingHashes) {
 				this.log('✗ Invalid proof structure');
-				// biome-ignore lint/security/noSecrets: These are field names, not secrets
 				this.log('Must contain eventHash, merkleRoot, and siblingHashes');
 				process.exitCode = 1;
 				return;

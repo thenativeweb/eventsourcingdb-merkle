@@ -3,7 +3,6 @@ import { describe, it } from 'node:test';
 import { calculateEventHash, hashPair } from './hash.js';
 import type { CloudEvent } from './types.js';
 
-// biome-ignore lint/security/noSecrets: Test file contains SHA256 hashes, not secrets
 describe('calculateEventHash', () => {
 	it('calculates the correct hash for an event', () => {
 		const event: CloudEvent = {
