@@ -14,13 +14,13 @@
 		"commands": "./dist/commands"
 	},
 	"dependencies": {
-		"@oclif/core": "4.11.3"
+		"@oclif/core": "4.11.4"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.15",
-		"@types/node": "25.9.0",
+		"@biomejs/biome": "2.4.16",
+		"@types/node": "25.9.1",
 		"tsup": "8.5.1",
-		"tsx": "4.22.2",
+		"tsx": "4.22.4",
 		"typescript": "6.0.3"
 	},
 	"scripts": {
