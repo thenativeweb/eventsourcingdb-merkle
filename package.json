@@ -27,9 +27,8 @@
 		"analyze": "npx tsc --noEmit && npx biome check --error-on-warnings .",
 		"build": "npx tsc --noEmit && npx tsdown",
 		"format": "npx biome check --write .",
-		"pretest": "npm run build",
 		"qa": "npm run analyze && npm run test",
-		"test": "node --test --import tsx \"./src/**/*.test.ts\""
+		"test": "npm run build && node --test --import tsx \"./src/**/*.test.ts\""
 	},
 	"repository": {
 		"type": "git",
