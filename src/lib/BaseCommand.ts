@@ -1,7 +1,7 @@
 import { Command } from '@oclif/core';
 
 export default abstract class BaseCommand extends Command {
-	protected catch(error: Error & { oclif?: { exit?: number } }): Promise<unknown> {
+	protected override catch(error: Error & { oclif?: { exit?: number } }): Promise<unknown> {
 		const errorName = error.constructor.name;
 
 		// Check if it's a RequiredArgsError or NonExistentFlagsError

@@ -1,15 +1,16 @@
 {
 	"compilerOptions": {
-		"declaration": true,
-		"esModuleInterop": true,
-		"lib": ["ES2023"],
-		"module": "NodeNext",
+		"module": "nodenext",
+		"target": "esnext",
+		"lib": ["esnext"],
+		"types": ["node"],
+		"noUncheckedIndexedAccess": true,
+		"noImplicitOverride": true,
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"erasableSyntaxOnly": true,
 		"outDir": "dist",
-		"resolveJsonModule": true,
-		"strict": true,
-		"target": "ES2023",
-		"types": ["node"]
+		"rootDir": "./src"
 	},
-	"include": ["./src/**/*.ts"],
-	"exclude": ["./dist"]
+	"include": ["./src/**/*.ts"]
 }

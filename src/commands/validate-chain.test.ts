@@ -57,16 +57,20 @@ describe('validate-chain', () => {
 		writeFileSync(validBackup, validEvents.map(e => JSON.stringify(e)).join('\n'));
 
 		// Create invalid backup (wrong predecessor hash)
+		const [firstValidEvent, secondValidEvent] = validEvents;
+		if (firstValidEvent === undefined || secondValidEvent === undefined) {
+			throw new Error('Test fixture setup failed: expected two valid events');
+		}
 		const invalidEvents = [
-			validEvents[0],
+			firstValidEvent,
 			{
 				type: 'event',
 				payload: {
 					event: {
-						...validEvents[1].payload.event,
+						...secondValidEvent.payload.event,
 						predecessorhash: 'wrong_hash',
 					},
-					hash: validEvents[1].payload.hash,
+					hash: secondValidEvent.payload.hash,
 				},
 			},
 		];
@@ -75,7 +79,7 @@ describe('validate-chain', () => {
 	});
 
 	it('validates a correct chain', () => {
-		const output = execSync(`npx tsx ./src/index.ts validate-chain ${validBackup}`, {
+		const output = execSync(`node ./dist/index.js validate-chain ${validBackup}`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -85,7 +89,7 @@ describe('validate-chain', () => {
 	it('detects chain validation errors', () => {
 		assert.throws(
 			() => {
-				execSync(`npx tsx ./src/index.ts validate-chain ${invalidBackup}`, {
+				execSync(`node ./dist/index.js validate-chain ${invalidBackup}`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -103,7 +107,7 @@ describe('validate-chain', () => {
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {
-				execSync('npx tsx ./src/index.ts validate-chain /nonexistent/file.json', {
+				execSync('node ./dist/index.js validate-chain /nonexistent/file.json', {
 					encoding: 'utf-8',
 				});
 			},
@@ -120,7 +124,7 @@ describe('validate-chain', () => {
 
 	it('shows error when file argument is missing', () => {
 		try {
-			execSync('npx tsx ./src/index.ts validate-chain', {
+			execSync('node ./dist/index.js validate-chain', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');

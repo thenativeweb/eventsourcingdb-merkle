@@ -53,7 +53,7 @@ describe('get-proof', () => {
 	});
 
 	it('generates proof for event', () => {
-		const output = execSync(`npx tsx ./src/index.ts get-proof ${testBackup} 0`, {
+		const output = execSync(`node ./dist/index.js get-proof ${testBackup} 0`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -65,7 +65,7 @@ describe('get-proof', () => {
 	});
 
 	it('outputs proof as JSON', () => {
-		const output = execSync(`npx tsx ./src/index.ts get-proof ${testBackup} 0 --json`, {
+		const output = execSync(`node ./dist/index.js get-proof ${testBackup} 0 --json`, {
 			encoding: 'utf-8',
 		});
 		const parsed = JSON.parse(output.trim());
@@ -78,7 +78,7 @@ describe('get-proof', () => {
 	it('handles non-existent event ID', () => {
 		assert.throws(
 			() => {
-				execSync(`npx tsx ./src/index.ts get-proof ${testBackup} 999`, {
+				execSync(`node ./dist/index.js get-proof ${testBackup} 999`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -93,7 +93,7 @@ describe('get-proof', () => {
 
 	it('shows error when arguments are missing', () => {
 		try {
-			execSync('npx tsx ./src/index.ts get-proof', {
+			execSync('node ./dist/index.js get-proof', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');

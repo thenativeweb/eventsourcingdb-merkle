@@ -53,7 +53,7 @@ describe('merkle-root', () => {
 	});
 
 	it('calculates and displays merkle root', () => {
-		const output = execSync(`npx tsx ./src/index.ts merkle-root ${testBackup}`, {
+		const output = execSync(`node ./dist/index.js merkle-root ${testBackup}`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -65,7 +65,7 @@ describe('merkle-root', () => {
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {
-				execSync('npx tsx ./src/index.ts merkle-root /nonexistent/file.json', {
+				execSync('node ./dist/index.js merkle-root /nonexistent/file.json', {
 					encoding: 'utf-8',
 				});
 			},
@@ -82,7 +82,7 @@ describe('merkle-root', () => {
 
 	it('shows error when file argument is missing', () => {
 		try {
-			execSync('npx tsx ./src/index.ts merkle-root', {
+			execSync('node ./dist/index.js merkle-root', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');
