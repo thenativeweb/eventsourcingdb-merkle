@@ -8,6 +8,7 @@
 	},
 	"bin": "./dist/index.js",
 	"type": "module",
+	"files": ["dist"],
 	"oclif": {
 		"bin": "eventsourcingdb-merkle",
 		"dirname": "eventsourcingdb-merkle",
@@ -19,13 +20,12 @@
 	"devDependencies": {
 		"@biomejs/biome": "2.5.3",
 		"@types/node": "26.1.1",
-		"tsdown": "0.22.4",
 		"tsx": "4.23.0",
 		"typescript": "7.0.2"
 	},
 	"scripts": {
 		"analyze": "npx tsc --noEmit && npx biome check --error-on-warnings .",
-		"build": "npx tsc --noEmit && npx tsdown",
+		"build": "npx tsc -p tsconfig.build.json",
 		"format": "npx biome check --write .",
 		"qa": "npm run analyze && npm run test",
 		"test": "npm run build && node --test --import tsx \"./src/**/*.test.ts\""

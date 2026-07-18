@@ -6,10 +6,6 @@ export const buildMerkleRoot = (hashes: string[]): string => {
 		throw new Error('Cannot build Merkle root from empty list');
 	}
 
-	if (hashes.length === 1) {
-		return hashes[0];
-	}
-
 	let currentLevel = [...hashes];
 
 	while (currentLevel.length > 1) {
@@ -19,13 +15,22 @@ export const buildMerkleRoot = (hashes: string[]): string => {
 			const left = currentLevel[i];
 			const right = i + 1 < currentLevel.length ? currentLevel[i + 1] : currentLevel[i];
 
+			if (left === undefined || right === undefined) {
+				throw new Error('Unexpected undefined hash while building Merkle tree');
+			}
+
 			nextLevel.push(hashPair(left, right));
 		}
 
 		currentLevel = nextLevel;
 	}
 
-	return currentLevel[0];
+	const [root] = currentLevel;
+	if (root === undefined) {
+		throw new Error('Failed to compute Merkle root');
+	}
+
+	return root;
 };
 
 export const generateMerkleProof = (
@@ -50,6 +55,10 @@ export const generateMerkleProof = (
 			const left = currentLevel[i];
 			const right = i + 1 < currentLevel.length ? currentLevel[i + 1] : currentLevel[i];
 
+			if (left === undefined || right === undefined) {
+				throw new Error('Unexpected undefined hash while generating Merkle proof');
+			}
+
 			if (i === currentIndex || i + 1 === currentIndex) {
 				if (currentIndex % 2 === 0) {
 					// Target is on the left
@@ -70,10 +79,15 @@ export const generateMerkleProof = (
 		currentIndex = nextIndex;
 	}
 
+	const [merkleRoot] = currentLevel;
+	if (merkleRoot === undefined) {
+		throw new Error('Failed to compute Merkle root');
+	}
+
 	return {
 		eventHash: targetHash,
 		siblingHashes,
-		merkleRoot: currentLevel[0],
+		merkleRoot,
 	};
 };
 

@@ -34,7 +34,7 @@ describe('verify-proof', () => {
 	});
 
 	it('verifies valid proof from file', () => {
-		const output = execSync(`npx tsx ./src/index.ts verify-proof ${validProofFile}`, {
+		const output = execSync(`node ./dist/index.js verify-proof ${validProofFile}`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -50,7 +50,7 @@ describe('verify-proof', () => {
 			siblingHashes: [],
 			merkleRoot: 'test123',
 		});
-		const output = execSync(`npx tsx ./src/index.ts verify-proof '${proof}'`, {
+		const output = execSync(`node ./dist/index.js verify-proof '${proof}'`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -60,7 +60,7 @@ describe('verify-proof', () => {
 	it('detects invalid proof', () => {
 		assert.throws(
 			() => {
-				execSync(`npx tsx ./src/index.ts verify-proof ${invalidProofFile}`, {
+				execSync(`node ./dist/index.js verify-proof ${invalidProofFile}`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -77,7 +77,7 @@ describe('verify-proof', () => {
 		const invalidStructure = JSON.stringify({ invalid: 'structure' });
 		assert.throws(
 			() => {
-				execSync(`npx tsx ./src/index.ts verify-proof '${invalidStructure}'`, {
+				execSync(`node ./dist/index.js verify-proof '${invalidStructure}'`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -92,7 +92,7 @@ describe('verify-proof', () => {
 
 	it('shows error when proof argument is missing', () => {
 		try {
-			execSync('npx tsx ./src/index.ts verify-proof', {
+			execSync('node ./dist/index.js verify-proof', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');

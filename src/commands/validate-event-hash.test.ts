@@ -38,7 +38,7 @@ describe('validate-event-hash', () => {
 
 	it('validates event hash from file', () => {
 		const output = execSync(
-			`npx tsx ./src/index.ts validate-event-hash --file ${testBackup} --event-id 0`,
+			`node ./dist/index.js validate-event-hash --file ${testBackup} --event-id 0`,
 			{ encoding: 'utf-8' },
 		);
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -50,7 +50,7 @@ describe('validate-event-hash', () => {
 	it('handles non-existent event ID', () => {
 		assert.throws(
 			() => {
-				execSync(`npx tsx ./src/index.ts validate-event-hash --file ${testBackup} --event-id 999`, {
+				execSync(`node ./dist/index.js validate-event-hash --file ${testBackup} --event-id 999`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -75,7 +75,7 @@ describe('validate-event-hash', () => {
 			predecessorhash: '0'.repeat(64),
 			data: { value: 'test' },
 		});
-		const output = execSync(`npx tsx ./src/index.ts validate-event-hash --event '${event}'`, {
+		const output = execSync(`node ./dist/index.js validate-event-hash --event '${event}'`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -85,7 +85,7 @@ describe('validate-event-hash', () => {
 	it('shows error when event-id is missing with file', () => {
 		assert.throws(
 			() => {
-				execSync(`npx tsx ./src/index.ts validate-event-hash --file ${testBackup}`, {
+				execSync(`node ./dist/index.js validate-event-hash --file ${testBackup}`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -101,7 +101,7 @@ describe('validate-event-hash', () => {
 	it('shows error when no arguments provided', () => {
 		assert.throws(
 			() => {
-				execSync('npx tsx ./src/index.ts validate-event-hash', {
+				execSync('node ./dist/index.js validate-event-hash', {
 					encoding: 'utf-8',
 				});
 			},

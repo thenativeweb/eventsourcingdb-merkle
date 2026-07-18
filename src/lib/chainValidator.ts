@@ -13,8 +13,7 @@ export interface ChainValidationResult {
 export const validateChain = (entries: BackupEntry[]): ChainValidationResult => {
 	const errors: Array<{ eventId: string; message: string }> = [];
 
-	for (let i = 0; i < entries.length; i++) {
-		const entry = entries[i];
+	for (const [i, entry] of entries.entries()) {
 		const event = entry.payload.event;
 		const storedHash = entry.payload.hash;
 
@@ -37,7 +36,7 @@ export const validateChain = (entries: BackupEntry[]): ChainValidationResult => 
 		// Validate predecessor hash
 		if (i > 0) {
 			const previousEntry = entries[i - 1];
-			const expectedPredecessorHash = previousEntry.payload.hash;
+			const expectedPredecessorHash = previousEntry?.payload.hash;
 
 			if (event.predecessorhash !== expectedPredecessorHash) {
 				errors.push({

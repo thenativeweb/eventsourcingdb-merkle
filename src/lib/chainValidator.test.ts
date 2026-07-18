@@ -16,7 +16,9 @@ describe('validateChain', () => {
 	it('detects hash mismatch', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');
 		// Tamper with hash
-		entries[1].payload.hash = 'tampered';
+		const [, secondEntry] = entries;
+		assert.ok(secondEntry);
+		secondEntry.payload.hash = 'tampered';
 
 		const result = validateChain(entries);
 
@@ -28,7 +30,9 @@ describe('validateChain', () => {
 	it('detects predecessor hash mismatch', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');
 		// Tamper with predecessor hash
-		entries[2].payload.event.predecessorhash = 'tampered';
+		const [, , thirdEntry] = entries;
+		assert.ok(thirdEntry);
+		thirdEntry.payload.event.predecessorhash = 'tampered';
 
 		const result = validateChain(entries);
 
@@ -39,7 +43,9 @@ describe('validateChain', () => {
 	it('validates first event has null predecessor', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');
 		// Tamper with first event's predecessor
-		entries[0].payload.event.predecessorhash = 'invalid';
+		const [firstEntry] = entries;
+		assert.ok(firstEntry);
+		firstEntry.payload.event.predecessorhash = 'invalid';
 
 		const result = validateChain(entries);
 

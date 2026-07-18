@@ -65,8 +65,10 @@ describe('generateMerkleProof', () => {
 
 		assert.strictEqual(proof.eventHash, 'hash1');
 		assert.strictEqual(proof.siblingHashes.length, 1);
-		assert.strictEqual(proof.siblingHashes[0].hash, 'hash2');
-		assert.strictEqual(proof.siblingHashes[0].position, 'right');
+		const [sibling] = proof.siblingHashes;
+		assert.ok(sibling);
+		assert.strictEqual(sibling.hash, 'hash2');
+		assert.strictEqual(sibling.position, 'right');
 	});
 
 	it('generates proof for second element in pair', () => {
@@ -75,8 +77,10 @@ describe('generateMerkleProof', () => {
 
 		assert.strictEqual(proof.eventHash, 'hash2');
 		assert.strictEqual(proof.siblingHashes.length, 1);
-		assert.strictEqual(proof.siblingHashes[0].hash, 'hash1');
-		assert.strictEqual(proof.siblingHashes[0].position, 'left');
+		const [sibling] = proof.siblingHashes;
+		assert.ok(sibling);
+		assert.strictEqual(sibling.hash, 'hash1');
+		assert.strictEqual(sibling.position, 'left');
 	});
 
 	it('generates proof for element in larger tree', () => {
@@ -121,7 +125,9 @@ describe('verifyMerkleProof', () => {
 	it('rejects invalid proof with tampered sibling', () => {
 		const hashes = ['hash1', 'hash2', 'hash3', 'hash4'];
 		const proof = generateMerkleProof(hashes, 'hash3');
-		proof.siblingHashes[0].hash = 'tampered';
+		const [sibling] = proof.siblingHashes;
+		assert.ok(sibling);
+		sibling.hash = 'tampered';
 
 		assert.strictEqual(verifyMerkleProof(proof), false);
 	});
