@@ -1,6 +1,6 @@
 {
 	"name": "eventsourcingdb-merkle",
-	"version": "1.1.2",
+	"version": "1.1.3",
 	"description": "Merkle tree utilities for EventSourcingDB backups.",
 	"author": {
 		"name": "the native web GmbH",
@@ -8,7 +8,9 @@
 	},
 	"bin": "./dist/index.js",
 	"type": "module",
-	"files": ["dist"],
+	"files": [
+		"dist"
+	],
 	"oclif": {
 		"bin": "eventsourcingdb-merkle",
 		"dirname": "eventsourcingdb-merkle",
