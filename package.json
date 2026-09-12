@@ -17,7 +17,7 @@
 		"commands": "./dist/commands"
 	},
 	"dependencies": {
-		"@oclif/core": "4.14.0"
+		"@oclif/core": "5.0.0"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.12",
