@@ -195,7 +195,7 @@ Merkle Root: d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
 
 ## Understanding the Technical Details
 
-The tool implements Merkle trees using SHA-256 hashing, following the EventSourcingDB specification for event hash calculation. Event hashes are computed by first creating a metadata string from the CloudEvents fields, then hashing the metadata and the JSON-stringified data separately, and finally hashing the concatenation of both hashes.
+The tool implements Merkle trees using SHA-256 hashing, following the EventSourcingDB specification for event hash calculation. Event hashes are computed by first creating a metadata string from the CloudEvents fields, then hashing the metadata and the data separately, and finally hashing the concatenation of both hashes. The data is hashed exactly as it appears in the backup or in the event given with `--event`, rather than parsed and serialized again, since that would change escape sequences such as `\u003c` for `<` and the notation of numbers.
 
 The Merkle tree is constructed by treating event hashes as leaf nodes. Internal nodes are created by hashing the concatenation of their child hashes. If the number of nodes at any level is odd, the last node is duplicated to create a complete binary tree. This process continues until a single root hash remains.
 

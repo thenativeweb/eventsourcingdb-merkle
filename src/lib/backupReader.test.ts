@@ -186,3 +186,24 @@ describe('readBackupFile with lines other than events', () => {
 		});
 	});
 });
+
+describe('readBackupFile with data that JSON.stringify writes differently', () => {
+	// A backup that EventSourcingDB 1.2.0 wrote, whose data holds braces,
+	// brackets, quotes, and backslashes inside strings, characters that it
+	// escapes, and characters beyond ASCII.
+	const backupWithTrickyData = 'test-fixtures/backup-with-tricky-data.ndjson';
+
+	it('takes the data of every event exactly as it appears in its line', async () => {
+		const entries = await readBackupFile(backupWithTrickyData);
+
+		assert.deepStrictEqual(
+			entries.map(entry => entry.payload.originalDataString),
+			[
+				'{"note":"a } b { c","title":"Braces in a string"}',
+				// biome-ignore lint/security/noSecrets: Escape sequences of test data, not a secret
+				'{"borrower":"Tom \\u0026 \\u003cJerry\\u003e"}',
+				'{"list":["{","}","]["],"nested":{"data":{"x":"}"}},"quote":"say \\"hi\\" \\\\ done","title":"2001 – A Space Odyssey, é"}',
+			],
+		);
+	});
+});

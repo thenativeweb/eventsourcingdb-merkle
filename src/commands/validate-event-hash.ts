@@ -2,6 +2,7 @@ import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { findEventById, readBackupFile } from '../lib/backupReader.js';
 import { calculateEventHash } from '../lib/hash.js';
+import { getRawValue } from '../lib/rawJson.js';
 import type { BackupEntry, CloudEvent } from '../lib/types.js';
 
 export default class ValidateEventHash extends BaseCommand {
@@ -63,11 +64,11 @@ export default class ValidateEventHash extends BaseCommand {
 					entry = parsed as BackupEntry;
 					event = entry.payload.event;
 					storedHash = entry.payload.hash;
-					originalDataString = entry.payload.originalDataString;
+					originalDataString = getRawValue(flags.event, ['payload', 'event', 'data']);
 				} else {
 					event = parsed as CloudEvent;
 					// No stored hash to compare against
-					const calculatedHash = calculateEventHash(event);
+					const calculatedHash = calculateEventHash(event, getRawValue(flags.event, ['data']));
 					this.log(`Calculated hash: ${calculatedHash}`);
 					return;
 				}

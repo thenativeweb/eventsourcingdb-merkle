@@ -1,6 +1,6 @@
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync, execSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
@@ -112,5 +112,37 @@ describe('validate-event-hash', () => {
 				return true;
 			},
 		);
+	});
+
+	describe('with data that JSON.stringify writes differently', () => {
+		const backupLines = readFileSync('test-fixtures/backup-with-tricky-data.ndjson', 'utf-8')
+			.trimEnd()
+			.split('\n');
+
+		for (const [index, line] of backupLines.entries()) {
+			it(`validates the hash of event ${index} given as a line of a backup`, () => {
+				const output = execFileSync(
+					'node',
+					['./dist/index.js', 'validate-event-hash', `--event=${line}`],
+					{ encoding: 'utf-8' },
+				);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(output, /✓ Hash is valid/);
+			});
+
+			it(`calculates the stored hash of event ${index} given as an event without a hash`, () => {
+				const { event, hash } = (JSON.parse(line) as { payload: { event: unknown; hash: string } })
+					.payload;
+				const eventLine = line.slice(line.indexOf('{"source"'), line.lastIndexOf(',"hash"'));
+				assert.deepStrictEqual(JSON.parse(eventLine), event);
+
+				const output = execFileSync(
+					'node',
+					['./dist/index.js', 'validate-event-hash', `--event=${eventLine}`],
+					{ encoding: 'utf-8' },
+				);
+				assert.strictEqual(output, `Calculated hash: ${hash}\n`);
+			});
+		}
 	});
 });
