@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
@@ -92,5 +93,23 @@ describe('merkle-root', () => {
 			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
 			assert.match(output, /Missing 1 required arg/);
 		}
+	});
+
+	it('calculates the Merkle root of a backup of a store with a registered schema', () => {
+		const output = execSync(
+			'node ./dist/index.js merkle-root test-fixtures/backup-with-schema.ndjson',
+			{ encoding: 'utf-8' },
+		);
+		const [firstHash, secondHash] = readFileSync('test-fixtures/backup-with-schema.ndjson', 'utf-8')
+			.trimEnd()
+			.split('\n')
+			.map(line => JSON.parse(line) as { type: string; payload: { hash?: string } })
+			.filter(line => line.type === 'event')
+			.map(line => line.payload.hash);
+		const expectedRoot = createHash('sha256').update(`${firstHash}${secondHash}`).digest('hex');
+
+		assert.match(output, new RegExp(`Merkle Root: ${expectedRoot}`));
+		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+		assert.match(output, /Total events: 2/);
 	});
 });

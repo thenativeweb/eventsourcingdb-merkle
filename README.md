@@ -199,7 +199,7 @@ The tool implements Merkle trees using SHA-256 hashing, following the EventSourc
 
 The Merkle tree is constructed by treating event hashes as leaf nodes. Internal nodes are created by hashing the concatenation of their child hashes. If the number of nodes at any level is odd, the last node is duplicated to create a complete binary tree. This process continues until a single root hash remains.
 
-Backup files are expected to be in NDJSON format, where each line contains a JSON object with a `type` field set to `"event"` and a `payload` field containing both the CloudEvents-compliant event and its hash. This format ensures that the tool can efficiently process large backup files without loading the entire file into memory.
+Backup files are expected to be in the NDJSON format that EventSourcingDB writes on `/api/v1/backup`, where each line contains a JSON object with a `type` and a `payload` field. A line of the type `event` holds a CloudEvents-compliant event and its hash. A line of the type `schema` holds the schema of an event type, which the tool skips, since neither the hashes nor the chain cover it. A backup that holds a line of the type `error` was cut short, and the tool refuses it, as it refuses a line of any other type or one that is not valid JSON, naming the line.
 
 ## Running Quality Assurance
 

@@ -1,6 +1,25 @@
 import assert from 'node:assert';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { findEventById, readBackupFile } from './backupReader.js';
+
+// A backup that EventSourcingDB 1.2.0 wrote for a store with a registered
+// schema, which it writes as a line of its own before the events.
+const backupWithSchema = 'test-fixtures/backup-with-schema.ndjson';
+
+const writeBackup = (lines: string[]): string => {
+	const directory = mkdtempSync(join(tmpdir(), 'esdb-merkle-'));
+	const filePath = join(directory, 'backup.ndjson');
+	writeFileSync(filePath, `${lines.join('\n')}\n`);
+
+	return filePath;
+};
+
+const linesOfBackupWithSchema = (): string[] => {
+	return readFileSync(backupWithSchema, 'utf-8').trimEnd().split('\n');
+};
 
 describe('readBackupFile', () => {
 	it('reads a backup file with multiple events', async () => {
@@ -59,5 +78,111 @@ describe('findEventById', () => {
 		const event = findEventById(entries, '999');
 
 		assert.strictEqual(event, undefined);
+	});
+});
+
+describe('readBackupFile with lines other than events', () => {
+	it('skips the schema lines of a backup', async () => {
+		const entries = await readBackupFile(backupWithSchema);
+
+		assert.deepStrictEqual(
+			entries.map(entry => entry.payload.event.id),
+			['0', '1'],
+		);
+	});
+
+	it('reports a backup that holds an error line as incomplete', async () => {
+		const filePath = writeBackup([
+			...linesOfBackupWithSchema(),
+			'{"type":"error","payload":"database is shutting down: try again later"}',
+		]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message:
+				'the backup is incomplete: line 4 reports an error: database is shutting down: try again later',
+		});
+	});
+
+	it('aborts at a line of an unknown type', async () => {
+		const filePath = writeBackup([
+			...linesOfBackupWithSchema(),
+			'{"type":"backup","data":{"formatVersion":2,"lastBackedUpEvent":null}}',
+		]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 4 has an unknown type: backup',
+		});
+	});
+
+	it('counts blank lines when it names a line', async () => {
+		const [schemaLine] = linesOfBackupWithSchema();
+		assert.ok(schemaLine);
+		const filePath = writeBackup([
+			schemaLine,
+			'',
+			'{"type":"backup","data":{"formatVersion":2,"lastBackedUpEvent":null}}',
+		]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 3 has an unknown type: backup',
+		});
+	});
+
+	for (const line of ['42', 'null', '[]', '{}', '{"type":{"name":"event"}}']) {
+		it(`aborts at a line without a type, such as ${line}`, async () => {
+			const [schemaLine] = linesOfBackupWithSchema();
+			assert.ok(schemaLine);
+			const filePath = writeBackup([schemaLine, line]);
+
+			await assert.rejects(readBackupFile(filePath), {
+				message: 'line 2 has no type',
+			});
+		});
+	}
+
+	it('aborts at a line that is not JSON', async () => {
+		const [schemaLine, firstEventLine] = linesOfBackupWithSchema();
+		assert.ok(schemaLine);
+		assert.ok(firstEventLine);
+		const filePath = writeBackup([schemaLine, firstEventLine.slice(0, 40)]);
+
+		await assert.rejects(readBackupFile(filePath), (error: Error) => {
+			assert.ok(error.message.startsWith('line 2 is not valid JSON: '), error.message);
+
+			return true;
+		});
+	});
+
+	it('aborts at an event line without an event', async () => {
+		const filePath = writeBackup([
+			...linesOfBackupWithSchema(),
+			'{"type":"event","payload":{"hash":"0000000000000000000000000000000000000000000000000000000000000000"}}',
+		]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 4 has an event line without an event',
+		});
+	});
+
+	it('aborts at an event line whose payload is null', async () => {
+		const filePath = writeBackup([...linesOfBackupWithSchema(), '{"type":"event","payload":null}']);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 4 has an event line without an event',
+		});
+	});
+
+	it('aborts at an event line without a hash', async () => {
+		const [schemaLine, firstEventLine] = linesOfBackupWithSchema();
+		assert.ok(schemaLine);
+		assert.ok(firstEventLine);
+		const eventLine = JSON.parse(firstEventLine) as { payload: { hash?: string } };
+		// Serializing leaves out a member that is undefined.
+		eventLine.payload.hash = undefined;
+		const filePath = writeBackup([schemaLine, JSON.stringify(eventLine)]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 2 has an event line without a hash',
+		});
 	});
 });
