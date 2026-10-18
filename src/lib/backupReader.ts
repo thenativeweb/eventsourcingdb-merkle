@@ -56,6 +56,10 @@ const readLine = (line: string, lineNumber: number): BackupEntry | undefined => 
 		payload?: unknown;
 	};
 
+	if (typeof type !== 'string') {
+		throw new Error(`line ${lineNumber} has no type`);
+	}
+
 	switch (type) {
 		case 'schema':
 			return undefined;
@@ -66,7 +70,7 @@ const readLine = (line: string, lineNumber: number): BackupEntry | undefined => 
 		case 'event':
 			return readEventLine(line, payload, lineNumber);
 		default:
-			throw new Error(`line ${lineNumber} has an unknown type: ${String(type)}`);
+			throw new Error(`line ${lineNumber} has an unknown type: ${type}`);
 	}
 };
 

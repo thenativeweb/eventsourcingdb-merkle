@@ -114,6 +114,32 @@ describe('readBackupFile with lines other than events', () => {
 		});
 	});
 
+	it('counts blank lines when it names a line', async () => {
+		const [schemaLine] = linesOfBackupWithSchema();
+		assert.ok(schemaLine);
+		const filePath = writeBackup([
+			schemaLine,
+			'',
+			'{"type":"backup","data":{"formatVersion":2,"lastBackedUpEvent":null}}',
+		]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 3 has an unknown type: backup',
+		});
+	});
+
+	for (const line of ['42', 'null', '[]', '{}', '{"type":{"name":"event"}}']) {
+		it(`aborts at a line without a type, such as ${line}`, async () => {
+			const [schemaLine] = linesOfBackupWithSchema();
+			assert.ok(schemaLine);
+			const filePath = writeBackup([schemaLine, line]);
+
+			await assert.rejects(readBackupFile(filePath), {
+				message: 'line 2 has no type',
+			});
+		});
+	}
+
 	it('aborts at a line that is not JSON', async () => {
 		const [schemaLine, firstEventLine] = linesOfBackupWithSchema();
 		assert.ok(schemaLine);
@@ -132,6 +158,14 @@ describe('readBackupFile with lines other than events', () => {
 			...linesOfBackupWithSchema(),
 			'{"type":"event","payload":{"hash":"0000000000000000000000000000000000000000000000000000000000000000"}}',
 		]);
+
+		await assert.rejects(readBackupFile(filePath), {
+			message: 'line 4 has an event line without an event',
+		});
+	});
+
+	it('aborts at an event line whose payload is null', async () => {
+		const filePath = writeBackup([...linesOfBackupWithSchema(), '{"type":"event","payload":null}']);
 
 		await assert.rejects(readBackupFile(filePath), {
 			message: 'line 4 has an event line without an event',
