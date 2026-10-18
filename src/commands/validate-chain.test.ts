@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
@@ -99,6 +99,38 @@ describe('validate-chain', () => {
 				assert.match(output, /✗ Chain validation failed/);
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
 				assert.match(output, /Predecessor hash mismatch/);
+				return true;
+			},
+		);
+	});
+
+	it('validates the chain of a backup of a store with a registered schema', () => {
+		const output = execSync(
+			'node ./dist/index.js validate-chain test-fixtures/backup-with-schema.ndjson',
+			{ encoding: 'utf-8' },
+		);
+		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+		assert.match(output, /✓ Chain is valid \(2 events\)/);
+	});
+
+	it('reports a backup that holds an error line as incomplete', () => {
+		const incompleteBackup = `${testDir}/incomplete-backup.json`;
+		writeFileSync(
+			incompleteBackup,
+			`${readFileSync('test-fixtures/backup-with-schema.ndjson', 'utf-8')}{"type":"error","payload":"database is shutting down: try again later"}\n`,
+		);
+
+		assert.throws(
+			() => {
+				execSync(`node ./dist/index.js validate-chain ${incompleteBackup}`, {
+					encoding: 'utf-8',
+				});
+			},
+			(error: Error & { stdout?: string }) => {
+				assert.strictEqual(
+					error.stdout,
+					'✗ Failed to validate chain: the backup is incomplete: line 4 reports an error: database is shutting down: try again later\n',
+				);
 				return true;
 			},
 		);
