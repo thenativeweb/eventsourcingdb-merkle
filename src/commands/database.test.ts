@@ -23,13 +23,18 @@ const run = (args: string[]): { output: string; exitCode: number } => {
 	}
 };
 
-// A database that holds events of both versions of the hash, as one does after
-// an update to EventSourcingDB 1.3: the events that release 1.2.0 wrote, restored
-// from its backup, followed by events that the preview of 1.3 wrote.
+// The tests run against the image tag that EVENTSOURCINGDB_IMAGE_TAG names, so
+// that the pipeline can run them against the latest release and against the
+// preview, as the client SDKs do. Without the variable, they run against the
+// preview.
+const imageTag = process.env.EVENTSOURCINGDB_IMAGE_TAG || 'preview';
+
+// A database that holds the events that release 1.2.0 wrote, restored from its
+// backup, followed by events that the release under test writes. From release
+// 1.3 on, those carry hashes of version 2, and the SDK reads the v2 API; before,
+// it falls back to the v1 API.
 describe('reading a running database', () => {
-	// Only the preview of EventSourcingDB 1.3 writes hashes of version 2 and
-	// offers the v2 API yet.
-	const container = new Container().withImageTag('preview');
+	const container = new Container().withImageTag(imageTag);
 	let source: string[] = [];
 
 	before(async () => {
@@ -151,6 +156,13 @@ describe('reading a running database', () => {
 		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 3\n'), output);
 	});
 
+	it('takes an event ID with leading zeros, as for a backup', () => {
+		const { output, exitCode } = run(['validate-event-hash', ...source, '--event-id=00']);
+
+		assert.strictEqual(exitCode, 0, output);
+		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 0\n'), output);
+	});
+
 	it('reports an event ID that names no number as not found, as for a backup', () => {
 		const { output, exitCode } = run(['validate-event-hash', ...source, '--event-id=abc']);
 
@@ -166,50 +178,6 @@ describe('reading a running database', () => {
 		assert.strictEqual(exitCode, 1);
 		assert.ok(output.startsWith('✗ Failed to validate chain: '), output);
 		assert.ok(!output.includes(token), output);
-	});
-});
-
-// EventSourcingDB 1.2.0 offers the v1 API only, which the SDK falls back to.
-describe('reading a running database before version 2 of the API', () => {
-	const container = new Container().withImageTag('1.2.0');
-
-	before(async () => {
-		await container.start();
-		await container.getClient().writeEvents([
-			{
-				source: 'https://library.eventsourcingdb.io',
-				subject: '/books/42',
-				type: 'io.eventsourcingdb.library.book-acquired',
-				data: { title: 'Tom & <Jerry>' },
-			},
-		]);
-	});
-
-	after(async () => {
-		await container.stop();
-	});
-
-	it('validates the chain of the database', () => {
-		const { output, exitCode } = run([
-			'validate-chain',
-			`--esdb-url=${container.getBaseUrl().toString()}`,
-			`--esdb-api-token=${container.getApiToken()}`,
-		]);
-
-		assert.strictEqual(exitCode, 0, output);
-		assert.strictEqual(output, '✓ Chain is valid (1 events)\n');
-	});
-
-	it('takes an event ID in another notation of the same number', () => {
-		const { output, exitCode } = run([
-			'validate-event-hash',
-			`--esdb-url=${container.getBaseUrl().toString()}`,
-			`--esdb-api-token=${container.getApiToken()}`,
-			'--event-id=00',
-		]);
-
-		assert.strictEqual(exitCode, 0, output);
-		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 0\n'), output);
 	});
 });
 
