@@ -290,7 +290,7 @@ In both versions, the data is hashed as it appears in the backup or in the event
 
 The Merkle tree of version 2 follows [RFC 6962](https://www.rfc-editor.org/rfc/rfc6962), as the tree of [eventsourcingdb-auditing](https://github.com/thenativeweb/eventsourcingdb-auditing) does:
 
-- The data of a leaf is the hash of its event as it is stored, prefix included, as text in UTF-8. Where the leaves are salted, its salt comes first: the HMAC-SHA256 of that text under the salt key.
+- The data of a leaf is the hash of its event as it is stored, prefix included, as text in UTF-8. Where the leaves are salted, its salt comes first: the HMAC-SHA256 of that text under the salt key. Since nothing marks where the salt ends, the tree takes only hashes in the form of version 1 or 2, which give the data of a leaf other lengths with a salt than without one, and refuses an event with any other hash, as `verify-proof` refuses a proof of one.
 - The hash of a leaf is the SHA-256 of the byte `0x00` followed by its data, and the hash of an inner node is the SHA-256 of the byte `0x01` followed by the hashes of its two children, so that neither can pass for the other.
 - The tree splits its leaves at the largest power of two smaller than their number, and never duplicates a node. Its root is the hash of its top node in hexadecimal, after the prefix `esdb:merkle:v2:`.
 
