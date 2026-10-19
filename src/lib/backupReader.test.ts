@@ -357,6 +357,21 @@ describe('readBackupFile with a backup that the v2 API wrote', () => {
 			message: 'line 8 begins an increment that does not follow on the part before it',
 		},
 		{
+			name: 'an increment whose anchor has the hash but not the ID of the event before it',
+			lines: () => [
+				...full,
+				...increment.map(line =>
+					line.replace('"lastBackedUpEvent":{"id":"2"', '"lastBackedUpEvent":{"id":"3"'),
+				),
+			],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment without an anchor that follows on a part with events',
+			lines: () => [...full, ...withAnchor(increment, null)],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
 			name: 'an increment whose anchor has an ID that is no integer',
 			lines: () => [...full, ...increment.map(line => line.replace('"id":"2"', '"id":"0x2"'))],
 			message: 'line 8 begins an increment that does not follow on the part before it',
