@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { access, chmod, type FileHandle, open, readFile, unlink } from 'node:fs/promises';
+import { access, type FileHandle, open, readFile, unlink } from 'node:fs/promises';
 
 // A salt key is 32 random bytes: RFC 2104 discourages keys for HMAC that are
 // shorter than the output of the hash, and longer ones add nothing. It is kept
@@ -47,16 +47,19 @@ export const writeSaltKey = async (filePath: string): Promise<void> => {
 	}
 
 	// A root may be calculated and published with the key right after it was
-	// written, so the key reaches the disk before it counts as written. A file
-	// that could not be written completely is removed again, so that it neither
-	// passes for a key nor keeps the next attempt from writing one; its write
-	// permission comes back first, without which Windows does not remove it.
+	// written, so the content of the file reaches the disk before the key counts
+	// as written. Its entry in the folder is left to the file system, whose
+	// journal records it along with the content on the file systems that Linux and
+	// macOS use by default. A file that could not be written completely is removed
+	// again, so that it neither passes for a key nor keeps the next attempt from
+	// writing one. It is closed first, which Windows needs to remove it, but a
+	// failure to close it keeps it neither from being removed nor from reporting
+	// why writing it failed.
 	try {
 		await file.writeFile(`${digits}\n`);
 		await file.sync();
 	} catch (error) {
-		await file.close();
-		await chmod(filePath, 0o600);
+		await file.close().catch(() => undefined);
 		await unlink(filePath);
 		throw error;
 	}

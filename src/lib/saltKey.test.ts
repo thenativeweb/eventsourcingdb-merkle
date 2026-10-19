@@ -133,6 +133,24 @@ describe('writeSaltKey', () => {
 		await assert.rejects(writeSaltKey(filePath), { message: 'the disk failed' });
 		assert.strictEqual(existsSync(filePath), false);
 	});
+
+	// A handle carries its close method itself rather than from its prototype, so
+	// the method is replaced on the handle that writes the key.
+	it('removes a key that it could not write completely, even if closing it fails', async test => {
+		const filePath = getTemporaryPath('merkle.key');
+		test.mock.method(await getFileHandlePrototype(), 'sync', function (this: FileHandle) {
+			const close = this.close.bind(this);
+			this.close = async () => {
+				await close();
+				throw new Error('closing failed');
+			};
+
+			return Promise.reject(new Error('the disk failed'));
+		});
+
+		await assert.rejects(writeSaltKey(filePath), { message: 'the disk failed' });
+		assert.strictEqual(existsSync(filePath), false);
+	});
 });
 
 describe('deriveSalt', () => {
