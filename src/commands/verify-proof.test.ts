@@ -201,6 +201,17 @@ describe('verify-proof', () => {
 			});
 		});
 
+		it('refuses a sibling of version 1 that is null', () => {
+			assert.deepStrictEqual(
+				run({ eventId: '0', eventHash, siblingHashes: [null], merkleRoot: 'abc123' }),
+				{
+					output:
+						'✗ Invalid proof structure\nEvery sibling has to have a hash, and the position left or right\n',
+					exitCode: 1,
+				},
+			);
+		});
+
 		it('refuses a last event ID in a proof of version 1', () => {
 			const { salt: _, ...unsalted } = proof;
 
