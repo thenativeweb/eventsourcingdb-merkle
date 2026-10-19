@@ -164,6 +164,15 @@ describe('merkle-root', () => {
 			assert.strictEqual(newer.output, older.output);
 		});
 
+		it('takes a last event ID in another notation of the same number, as EventSourcingDB does', () => {
+			const backup = '--backup=test-fixtures/backup-with-both-hash-versions.ndjson';
+
+			assert.strictEqual(
+				run([backup, '--last-event-id=01']).output,
+				run([backup, '--last-event-id=1']).output,
+			);
+		});
+
 		it('refuses a last event ID that the backup does not hold', () => {
 			const { output, exitCode } = run([
 				'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
