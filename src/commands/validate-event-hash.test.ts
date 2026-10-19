@@ -274,4 +274,32 @@ describe('validate-event-hash', () => {
 			);
 		});
 	});
+
+	describe('with a backup that the v2 API wrote', () => {
+		const eventLines = readFileSync('test-fixtures/backup-v2-full.ndjson', 'utf-8')
+			.trimEnd()
+			.split('\n')
+			.filter(line => line.startsWith('{"type":"event"'));
+
+		it('validates the hash of an event of the backup', () => {
+			const output = execSync(
+				'node ./dist/index.js validate-event-hash --file test-fixtures/backup-v2-full.ndjson --event-id 2',
+				{ encoding: 'utf-8' },
+			);
+			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+			assert.match(output, /✓ Hash is valid/);
+		});
+
+		for (const [index, line] of eventLines.entries()) {
+			it(`validates the hash of event ${index} given as a line of the backup`, () => {
+				const output = execFileSync(
+					'node',
+					['./dist/index.js', 'validate-event-hash', `--event=${line}`],
+					{ encoding: 'utf-8' },
+				);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(output, /✓ Hash is valid/);
+			});
+		}
+	});
 });

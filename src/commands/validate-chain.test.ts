@@ -153,6 +153,21 @@ describe('validate-chain', () => {
 		assert.strictEqual(output, '✓ Chain is valid (4 events)\n');
 	});
 
+	it('validates the chain of a full backup of the v2 API followed by its increments', () => {
+		const fullAndIncrements = `${testDir}/v2-full-and-increments.ndjson`;
+		writeFileSync(
+			fullAndIncrements,
+			['backup-v2-full.ndjson', 'backup-v2-increment.ndjson', 'backup-v2-empty-increment.ndjson']
+				.map(fileName => readFileSync(`test-fixtures/${fileName}`, 'utf-8'))
+				.join(''),
+		);
+
+		const output = execSync(`node ./dist/index.js validate-chain ${fullAndIncrements}`, {
+			encoding: 'utf-8',
+		});
+		assert.strictEqual(output, '✓ Chain is valid (5 events)\n');
+	});
+
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {

@@ -207,3 +207,226 @@ describe('readBackupFile with data that holds braces inside strings, or characte
 		);
 	});
 });
+
+describe('readBackupFile with a backup that the v2 API wrote', () => {
+	// A full backup, an increment that follows on it, and an empty increment that
+	// follows on that one, as a preview of EventSourcingDB 1.3 wrote them on
+	// /api/v2/management/create-backup, which its restore takes one after the
+	// other in a single file. The store holds events of both versions of the hash.
+	const linesOf = (fileName: string): string[] => {
+		return readFileSync(`test-fixtures/${fileName}`, 'utf-8').trimEnd().split('\n');
+	};
+	const full = linesOf('backup-v2-full.ndjson');
+	const increment = linesOf('backup-v2-increment.ndjson');
+	const emptyIncrement = linesOf('backup-v2-empty-increment.ndjson');
+
+	const withoutEnd = (lines: string[]): string[] => lines.slice(0, -1);
+
+	// A full backup of an empty store, as the v2 API writes it. Appended to
+	// itself, it is a part that follows on the one before, as both name no event.
+	const emptyFull = [
+		'{"type":"backup","data":{"formatVersion":2,"lastBackedUpEvent":null}}',
+		'{"type":"end","data":{}}',
+	];
+	const withAnchor = (lines: string[], anchor: unknown): string[] => {
+		const [header = '', ...rest] = lines;
+		const backupLine = JSON.parse(header) as { data: Record<string, unknown> };
+		backupLine.data.lastBackedUpEvent = anchor;
+
+		return [JSON.stringify(backupLine), ...rest];
+	};
+
+	it('reads the events of a full backup', async () => {
+		const entries = await readBackupFile('test-fixtures/backup-v2-full.ndjson');
+
+		assert.deepStrictEqual(
+			entries.map(entry => entry.payload.event.id),
+			['0', '1', '2'],
+		);
+		for (const [index, entry] of entries.entries()) {
+			const eventLine = full.find(line => line.includes(`"id":"${index}"`)) ?? '';
+			assert.ok(eventLine.includes(`"hash":"${entry.payload.hash}"`));
+			assert.ok(eventLine.includes(`"data":${entry.payload.originalDataString}`));
+		}
+	});
+
+	it('reads a full backup followed by its increments as one chain of events', async () => {
+		const entries = await readBackupFile(writeBackup([...full, ...increment, ...emptyIncrement]));
+
+		assert.deepStrictEqual(
+			entries.map(entry => entry.payload.event.id),
+			['0', '1', '2', '3', '4'],
+		);
+	});
+
+	it('skips heartbeats', async () => {
+		const heartbeat = '{"type":"heartbeat","data":{}}';
+		const [header, ...rest] = full;
+		assert.ok(header);
+		const entries = await readBackupFile(writeBackup([heartbeat, header, heartbeat, ...rest]));
+
+		assert.strictEqual(entries.length, 3);
+	});
+
+	for (const id of ['02', '+2']) {
+		it(`takes an increment that names its anchor by the ID ${id}, as the server reads it`, async () => {
+			const [header, ...rest] = increment;
+			assert.ok(header);
+			const entries = await readBackupFile(
+				writeBackup([...full, header.replace('"id":"2"', `"id":"${id}"`), ...rest]),
+			);
+
+			assert.strictEqual(entries.length, 5);
+		});
+	}
+
+	it('takes a part that follows on a full backup of an empty store', async () => {
+		const entries = await readBackupFile(writeBackup([...emptyFull, ...emptyFull]));
+
+		assert.strictEqual(entries.length, 0);
+	});
+
+	it('takes a format version written as a string, as the restore does', async () => {
+		const entries = await readBackupFile(
+			writeBackup([
+				full[0]?.replace('"formatVersion":2', '"formatVersion":"2"') ?? '',
+				...full.slice(1),
+			]),
+		);
+
+		assert.strictEqual(entries.length, 3);
+	});
+
+	const cases: { name: string; lines: () => string[]; message: string }[] = [
+		{
+			name: 'a part without its end line',
+			lines: () => withoutEnd(full),
+			message: 'the backup is incomplete: part 0 lacks its end line',
+		},
+		{
+			name: 'an increment without its end line',
+			lines: () => [...full, ...withoutEnd(increment)],
+			message: 'the backup is incomplete: part 1 lacks its end line',
+		},
+		{
+			name: 'an error line',
+			lines: () => [
+				...withoutEnd(full),
+				'{"type":"error","data":{"code":"database-shutting-down","description":"database is shutting down: try again later","details":{}}}',
+			],
+			message:
+				'the backup is incomplete: line 7 reports an error: database is shutting down: try again later',
+		},
+		{
+			name: 'a format version it does not know',
+			lines: () => [
+				full[0]?.replace('"formatVersion":2', '"formatVersion":3') ?? '',
+				...full.slice(1),
+			],
+			message: 'line 1 has an unsupported backup format version: 3',
+		},
+		{
+			name: 'a backup line without a format version',
+			lines: () => [full[0]?.replace('"formatVersion":2,', '') ?? '', ...full.slice(1)],
+			message: 'line 1 has an unsupported backup format version: none',
+		},
+		{
+			name: 'an increment that comes first',
+			lines: () => increment,
+			message: 'line 1 begins an increment, but a backup has to begin with a full backup',
+		},
+		{
+			name: 'an increment that does not follow on the part before it',
+			lines: () => [...full, ...emptyIncrement],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'a backup line whose format version is null',
+			lines: () => [
+				full[0]?.replace('"formatVersion":2', '"formatVersion":null') ?? '',
+				...full.slice(1),
+			],
+			message: 'line 1 has an unsupported backup format version: none',
+		},
+		{
+			name: 'an increment whose anchor has the ID but not the hash of the event before it',
+			lines: () => [
+				...full,
+				...withAnchor(increment, { id: '2', hash: `esdb:hash:v2:${'0'.repeat(64)}` }),
+			],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment whose anchor has the hash but not the ID of the event before it',
+			lines: () => [
+				...full,
+				...increment.map(line =>
+					line.replace('"lastBackedUpEvent":{"id":"2"', '"lastBackedUpEvent":{"id":"3"'),
+				),
+			],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment without an anchor that follows on a part with events',
+			lines: () => [...full, ...withAnchor(increment, null)],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment whose anchor has an ID that is no integer',
+			lines: () => [...full, ...increment.map(line => line.replace('"id":"2"', '"id":"0x2"'))],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment whose anchor has an ID that is no number at all',
+			lines: () => [...full, ...increment.map(line => line.replace('"id":"2"', '"id":"abc"'))],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'a part with a malformed anchor that follows on a full backup of an empty store',
+			lines: () => [...emptyFull, ...withAnchor(emptyFull, {})],
+			message: 'line 3 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'a part that begins before the part before it ended',
+			lines: () => [...withoutEnd(full), ...increment],
+			message: 'line 7 begins a part before the part before it ended',
+		},
+		{
+			name: 'an event line before the first backup line',
+			lines: () => full.slice(2),
+			message: 'line 1 has to begin a part with a backup line, but has the type event',
+		},
+		{
+			name: 'an event line after the end of a part',
+			lines: () => [...full, full[2] ?? ''],
+			message: 'line 8 has to begin a part with a backup line, but has the type event',
+		},
+		{
+			name: 'a schema after the events of its part',
+			lines: () => [full[0] ?? '', full[2] ?? '', full[1] ?? '', ...full.slice(3)],
+			message: 'line 3 holds a schema after the events of its part',
+		},
+		{
+			name: 'a line of an unknown type',
+			lines: () => [...withoutEnd(full), '{"type":"foo","data":{}}'],
+			message: 'line 7 has an unknown type: foo',
+		},
+		{
+			name: 'an event line without an event',
+			lines: () => [...withoutEnd(full), '{"type":"event","data":null}'],
+			message: 'line 7 has an event line without an event',
+		},
+		{
+			name: 'an event line without a hash',
+			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+			lines: () => [full[0] ?? '', full[1] ?? '', (full[2] ?? '').replace(/,"hash":"[^"]*"/u, '')],
+			message: 'line 3 has an event line without a hash',
+		},
+	];
+
+	for (const { name, lines, message } of cases) {
+		it(`aborts at ${name}`, async () => {
+			await assert.rejects(readBackupFile(writeBackup(lines())), { message });
+		});
+	}
+});
