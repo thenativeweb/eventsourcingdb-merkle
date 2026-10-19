@@ -137,16 +137,15 @@ describe('verifyVersion1Proof', () => {
 
 	// The trees of every size up to beyond a few powers of two, so that elements
 	// without a partner on one level or on several are on the paths.
-	it('verifies the proof of every element of a tree of any size', () => {
+	it('verifies the proof of every element of a tree of any size against its root', () => {
 		for (let count = 1; count <= 33; count++) {
 			const hashes = Array.from({ length: count }, (_, index) => `hash${index}`);
 
 			for (const hash of hashes) {
-				assert.strictEqual(
-					verifyVersion1Proof(generateVersion1Proof(hashes, hash)),
-					true,
-					`${hash} of ${count}`,
-				);
+				const proof = generateVersion1Proof(hashes, hash);
+
+				assert.strictEqual(proof.merkleRoot, buildVersion1Root(hashes), `root of ${count}`);
+				assert.strictEqual(verifyVersion1Proof(proof), true, `${hash} of ${count}`);
 			}
 		}
 	});
