@@ -101,13 +101,13 @@ Calculated hash: def456...
 
 #### Validating an Event from JSON
 
-You can also validate an event provided as a JSON string. This is useful when you receive an event from an external source and want to verify its hash without having access to the backup file. The command takes a line of a backup, a line of `read-events`, or an event on its own, as a client SDK hands it on, with its hash:
+You can also validate an event provided as a JSON string. This is useful when you receive an event from an external source and want to verify its hash without having access to the backup file. The command takes a line of a backup, a line of `read-events`, or an event on its own, with its hash:
 
 ```shell
 eventsourcingdb-merkle validate-event-hash --event='{"specversion":"1.0","id":"0",...,"hash":"esdb:hash:v2:..."}'
 ```
 
-If you provide a CloudEvent without a stored hash, the command simply calculates and displays the hash:
+If you provide a CloudEvent without a stored hash, the command simply calculates and displays the hash of version 1, since nothing tells which version is meant:
 
 ```
 Calculated hash: abc123...

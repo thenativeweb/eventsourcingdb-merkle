@@ -11,12 +11,9 @@ const hashVersion2Prefix = `${hashPrefix}v2:`;
 const missingField = '-';
 
 export class UnsupportedHashVersionError extends Error {
-	public readonly version: string;
-
 	public constructor(version: string) {
 		super(`Unsupported hash version: ${version}`);
 		this.name = 'UnsupportedHashVersionError';
-		this.version = version;
 	}
 }
 
