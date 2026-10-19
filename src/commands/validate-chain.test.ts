@@ -186,6 +186,23 @@ describe('validate-chain', () => {
 		);
 	});
 
+	it('shows error when it is called with a backup as an argument, as before version 2', () => {
+		try {
+			execSync('node ./dist/index.js validate-chain backup.json', {
+				encoding: 'utf-8',
+				stdio: 'pipe',
+			});
+			assert.fail('Expected command to fail');
+		} catch (error: unknown) {
+			const err = error as Error & { stdout?: string; status?: number };
+			assert.strictEqual(
+				err.stdout,
+				'✗ Unexpected argument: backup.json\nSee more help with --help\n',
+			);
+			assert.strictEqual(err.status, 2);
+		}
+	});
+
 	it('shows error when the backup is missing', () => {
 		try {
 			execSync('node ./dist/index.js validate-chain', {

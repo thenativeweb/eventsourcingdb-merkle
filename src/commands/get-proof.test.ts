@@ -138,6 +138,32 @@ describe('get-proof', () => {
 			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
 		});
 
+		it('takes an event ID in another notation of the same number, as EventSourcingDB does', () => {
+			const { output, exitCode } = run('get-proof', [
+				backup,
+				'--event-id=01',
+				'--last-event-id=1',
+				'--json',
+			]);
+
+			assert.strictEqual(exitCode, 0, output);
+			assert.strictEqual((JSON.parse(output) as { eventId: string }).eventId, '1');
+		});
+
+		it('refuses a last event ID that is no event ID', () => {
+			const { output, exitCode } = run('get-proof', [
+				backup,
+				'--event-id=0',
+				'--last-event-id=abc',
+			]);
+
+			assert.strictEqual(exitCode, 2);
+			assert.strictEqual(
+				output,
+				"✗ --last-event-id has to be an event ID, but is 'abc'\nSee more help with --help\n",
+			);
+		});
+
 		it('refuses an event beyond the last event ID', () => {
 			const { output, exitCode } = run('get-proof', [backup, '--event-id=3', '--last-event-id=1']);
 

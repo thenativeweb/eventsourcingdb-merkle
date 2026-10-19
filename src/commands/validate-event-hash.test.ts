@@ -222,6 +222,34 @@ describe('validate-event-hash', () => {
 			}
 		};
 
+		it('refuses a backup together with an event', () => {
+			const [line = ''] = readEventsLines;
+			try {
+				execFileSync(
+					'node',
+					[
+						'./dist/index.js',
+						'validate-event-hash',
+						'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
+						`--event=${line}`,
+					],
+					{ encoding: 'utf-8', stdio: 'pipe' },
+				);
+				assert.fail('Expected command to fail');
+			} catch (error: unknown) {
+				assert.strictEqual((error as { status?: number }).status, 2);
+			}
+		});
+
+		it('takes an event ID in another notation of the same number, as EventSourcingDB does', () => {
+			const output = execSync(
+				'node ./dist/index.js validate-event-hash --backup test-fixtures/backup-with-both-hash-versions.ndjson --event-id 03',
+				{ encoding: 'utf-8' },
+			);
+			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+			assert.match(output, /✓ Hash is valid\nEvent ID: 3\n/u);
+		});
+
 		it('validates the hash of an event of either version from a backup', () => {
 			for (const eventId of ['1', '3']) {
 				const output = execSync(

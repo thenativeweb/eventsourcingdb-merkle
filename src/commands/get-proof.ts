@@ -31,23 +31,24 @@ export default class GetProof extends BaseCommand {
 		const { flags } = await this.parse(GetProof);
 
 		if (!flags.backup) {
-			this.log('✗ --backup must be provided');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall('--backup must be provided');
 			return;
 		}
 
 		const eventId = flags['event-id'];
 		if (!eventId) {
-			this.log('✗ --event-id is required when using --backup');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall('--event-id is required when using --backup');
+			return;
+		}
+
+		const lastEventId = flags['last-event-id'];
+		if (lastEventId !== undefined && parseEventId(lastEventId) === undefined) {
+			this.refuseCall(`--last-event-id has to be an event ID, but is '${lastEventId}'`);
 			return;
 		}
 
 		try {
 			const allEntries = await readBackupFile(flags.backup);
-			const lastEventId = flags['last-event-id'];
 			const entries =
 				lastEventId === undefined ? allEntries : takeEntriesUpTo(allEntries, lastEventId);
 

@@ -173,6 +173,21 @@ describe('merkle-root', () => {
 			);
 		});
 
+		for (const lastEventId of ['abc', '']) {
+			it(`refuses a last event ID that is no event ID, such as '${lastEventId}'`, () => {
+				const { output, exitCode } = run([
+					'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
+					`--last-event-id=${lastEventId}`,
+				]);
+
+				assert.strictEqual(exitCode, 2);
+				assert.strictEqual(
+					output,
+					`✗ --last-event-id has to be an event ID, but is '${lastEventId}'\nSee more help with --help\n`,
+				);
+			});
+		}
+
 		it('refuses a last event ID that the backup does not hold', () => {
 			const { output, exitCode } = run([
 				'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',

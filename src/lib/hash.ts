@@ -51,18 +51,19 @@ const calculateEventHashOfVersion2 = (event: CloudEvent, dataString: string): st
 
 // calculateEventHash computes the hash of an event in the version that its
 // stored hash names, since an event keeps the version of the hash it was
-// written with, or in version 1 without a stored hash to go by. A stored hash
+// written with. An event without a stored hash names no version, which is what
+// calculateEventHashInEveryVersion is for. A stored hash
 // whose prefix names a version that the tool does not know cannot be verified,
 // which is not the same as being tampered with, so it is refused rather than
 // computed in another version that could only fail to match.
 export const calculateEventHash = (
 	event: CloudEvent,
-	originalDataString?: string,
-	storedHash?: string,
+	originalDataString: string | undefined,
+	storedHash: string,
 ): string => {
 	const dataString = originalDataString ?? JSON.stringify(event.data);
 
-	if (storedHash === undefined || !storedHash.startsWith(hashPrefix)) {
+	if (!storedHash.startsWith(hashPrefix)) {
 		return calculateEventHashOfVersion1(event, dataString);
 	}
 	if (storedHash.startsWith(hashVersion2Prefix)) {

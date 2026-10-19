@@ -1,19 +1,26 @@
 import { Command } from '@oclif/core';
 
 export default abstract class BaseCommand extends Command {
-	protected override catch(error: Error & { oclif?: { exit?: number } }): Promise<unknown> {
-		const errorName = error.constructor.name;
+	// refuseCall reports a call whose arguments or flags do not fit together, as
+	// oclif does for those it refuses itself, with the exit code 2.
+	protected refuseCall(message: string): void {
+		this.log(`✗ ${message}`);
+		this.log('See more help with --help');
+		process.exitCode = 2;
+	}
 
-		// Check if it's a RequiredArgsError or NonExistentFlagsError
-		if (errorName === 'RequiredArgsError' || errorName === 'NonExistentFlagsError') {
+	protected override catch(error: Error & { oclif?: { exit?: number } }): Promise<unknown> {
+		// oclif ends with the exit code 2 where it refuses the arguments and flags
+		// of a call, such as an argument that is missing or unexpected, a flag that
+		// does not exist, or two flags that cannot be used together. Such a call
+		// gets a message of its own rather than a stack trace.
+		if (error.oclif?.exit === 2) {
 			// Remove the "See more help with --help" line from oclif
 			const lines = error.message.split('\n');
 			const filteredLines = lines.filter(line => !line.includes('See more help'));
 			const message = filteredLines.join('\n').trim();
 
-			this.log(`✗ ${message}`);
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall(message);
 			return Promise.resolve();
 		}
 

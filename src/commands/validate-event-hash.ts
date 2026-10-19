@@ -37,16 +37,12 @@ export default class ValidateEventHash extends BaseCommand {
 		const { flags } = await this.parse(ValidateEventHash);
 
 		if (!flags.backup && !flags.event) {
-			this.log('✗ Either --backup with --event-id, or --event must be provided');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall('Either --backup with --event-id, or --event must be provided');
 			return;
 		}
 
 		if (flags.backup && !flags['event-id']) {
-			this.log('✗ --event-id is required when using --backup');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall('--event-id is required when using --backup');
 			return;
 		}
 
@@ -62,9 +58,7 @@ export default class ValidateEventHash extends BaseCommand {
 				const eventFromText = readEventText(flags.event);
 
 				if (eventFromText === undefined) {
-					this.log('✗ --event is neither an event nor a line of a backup or of read-events');
-					this.log('See more help with --help');
-					process.exitCode = 2;
+					this.refuseCall('--event is neither an event nor a line of a backup or of read-events');
 					return;
 				}
 

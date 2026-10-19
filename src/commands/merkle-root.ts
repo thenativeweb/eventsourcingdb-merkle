@@ -1,6 +1,7 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { readBackupFile } from '../lib/backupReader.js';
+import { parseEventId } from '../lib/eventId.js';
 import { takeEntriesUpTo } from '../lib/lastEventId.js';
 import { buildMerkleRoot } from '../lib/merkleTree.js';
 
@@ -25,18 +26,20 @@ export default class MerkleRoot extends BaseCommand {
 		const { flags } = await this.parse(MerkleRoot);
 
 		if (!flags.backup) {
-			this.log('✗ --backup must be provided');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall('--backup must be provided');
+			return;
+		}
+
+		const lastEventId = flags['last-event-id'];
+		if (lastEventId !== undefined && parseEventId(lastEventId) === undefined) {
+			this.refuseCall(`--last-event-id has to be an event ID, but is '${lastEventId}'`);
 			return;
 		}
 
 		try {
 			const allEntries = await readBackupFile(flags.backup);
 			const entries =
-				flags['last-event-id'] === undefined
-					? allEntries
-					: takeEntriesUpTo(allEntries, flags['last-event-id']);
+				lastEventId === undefined ? allEntries : takeEntriesUpTo(allEntries, lastEventId);
 			const hashes = entries.map(entry => entry.payload.hash);
 			const merkleRoot = buildMerkleRoot(hashes);
 

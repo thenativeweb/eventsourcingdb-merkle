@@ -21,9 +21,7 @@ export default class ValidateChain extends BaseCommand {
 		const { flags } = await this.parse(ValidateChain);
 
 		if (!flags.backup) {
-			this.log('✗ --backup must be provided');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+			this.refuseCall('--backup must be provided');
 			return;
 		}
 
