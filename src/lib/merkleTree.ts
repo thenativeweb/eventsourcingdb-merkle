@@ -143,10 +143,18 @@ export const getMerkleTreeVersion = (merkleRoot: string): MerkleTreeVersion => {
 const isDigest = (value: unknown): boolean =>
 	typeof value === 'string' && digestPattern.test(value);
 
-const isSiblingWithSide = (sibling: unknown): boolean =>
-	isObject(sibling) &&
-	isDigest(sibling.hash) &&
-	(sibling.position === 'left' || sibling.position === 'right');
+const isText = (value: unknown): boolean => typeof value === 'string';
+
+// A sibling of version 1 or 2 is an object with its hash and its side. The hash
+// of a sibling of version 2 is a digest, but that of version 1 has no fixed
+// form, since the tree of version 1 takes any stored hash as a leaf, so the
+// first sibling of a proof may be the stored hash of a neighbor.
+const isSiblingWithSide =
+	(isHash: (value: unknown) => boolean) =>
+	(sibling: unknown): boolean =>
+		isObject(sibling) &&
+		isHash(sibling.hash) &&
+		(sibling.position === 'left' || sibling.position === 'right');
 
 // An ID in a proof of version 3 is written as EventSourcingDB writes IDs, since
 // get-proof writes it rather than anyone typing it, so that the same proof has
@@ -190,6 +198,9 @@ export const findProofStructureProblem = (proof: unknown): string | undefined =>
 		if (hasLastEventId) {
 			return 'A proof of Merkle tree version 1 has no last event ID';
 		}
+		if (!proof.siblingHashes.every(isSiblingWithSide(isText))) {
+			return 'Every sibling has to have a hash, and the position left or right';
+		}
 
 		return undefined;
 	}
@@ -214,7 +225,7 @@ export const findProofStructureProblem = (proof: unknown): string | undefined =>
 	}
 
 	if (treeVersion === 2) {
-		return proof.siblingHashes.every(isSiblingWithSide)
+		return proof.siblingHashes.every(isSiblingWithSide(isDigest))
 			? undefined
 			: 'Every sibling has to have a hash of 64 hexadecimal digits, and the position left or right';
 	}

@@ -261,6 +261,19 @@ describe('verifyMerkleProof', () => {
 		assert.strictEqual(verifyMerkleProof(unsalted), true);
 		assert.strictEqual(verifyMerkleProof(forged), false);
 	});
+
+	it('rejects a proof of version 1 with a sibling on neither side', () => {
+		const version1Proof = proveWithSides(0, { treeVersion: 1 });
+		const onNeitherSide = {
+			...version1Proof,
+			siblingHashes: version1Proof.siblingHashes.map(sibling =>
+				sibling.position === 'right' ? { ...sibling, position: 'middle' } : sibling,
+			),
+		};
+
+		assert.strictEqual(verifyMerkleProof(version1Proof), true);
+		assert.strictEqual(verifyMerkleProof(onNeitherSide as MerkleProofWithSides), false);
+	});
 });
 
 describe('verifyMerkleProof of version 3', () => {
@@ -357,12 +370,47 @@ describe('findProofStructureProblem', () => {
 		siblingHashes: [firstSibling, ...version2Proof.siblingHashes.slice(1)],
 	});
 
+	// The first sibling of the proof of the first event of version 1 is the
+	// stored hash of the second event, which is of version 2.
+	const version1SiblingProblem = 'Every sibling has to have a hash, and the position left or right';
+	const [version1Sibling] = version1Proof.siblingHashes;
+	const withFirstVersion1Sibling = (firstSibling: unknown): unknown => ({
+		...version1Proof,
+		siblingHashes: [firstSibling, ...version1Proof.siblingHashes.slice(1)],
+	});
+
 	for (const [name, proof, problem] of [
 		['a proof of version 1', version1Proof, undefined],
 		[
 			'a proof of version 1 of any event hash',
 			{ ...version1Proof, eventHash: 'abc123' },
 			undefined,
+		],
+		[
+			'a proof of version 1 with a sibling of any hash',
+			withFirstVersion1Sibling({ ...version1Sibling, hash: 'abc123' }),
+			undefined,
+		],
+		['a sibling of version 1 that is null', withFirstVersion1Sibling(null), version1SiblingProblem],
+		[
+			'a sibling of version 1 that is no object',
+			withFirstVersion1Sibling('abc123'),
+			version1SiblingProblem,
+		],
+		[
+			'a sibling of version 1 whose hash is no text',
+			withFirstVersion1Sibling({ ...version1Sibling, hash: 1 }),
+			version1SiblingProblem,
+		],
+		[
+			'a sibling of version 1 on neither side',
+			withFirstVersion1Sibling({ ...version1Sibling, position: 'middle' }),
+			version1SiblingProblem,
+		],
+		[
+			'a sibling of version 1 after a salt',
+			{ ...(withFirstVersion1Sibling(null) as object), salt: '11'.repeat(32) },
+			'A proof of Merkle tree version 1 has no salt',
 		],
 		['a proof of version 2 with a salt', version2Proof, undefined],
 		['a proof of version 2 without a salt', { ...version2Proof, salt: undefined }, undefined],
