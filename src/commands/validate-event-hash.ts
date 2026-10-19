@@ -1,8 +1,10 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { type ChainEvent, fromCloudEvent } from '../lib/chainEvent.js';
+import { describeError } from '../lib/describeError.js';
 import { readEventText } from '../lib/eventText.js';
 import { calculateEventHashInEveryVersion, UnsupportedHashVersionError } from '../lib/hash.js';
+import { describeHashMismatch } from '../lib/hashReport.js';
 import { getSource, readEvent, sourceFlags } from '../lib/source.js';
 
 export default class ValidateEventHash extends BaseCommand {
@@ -112,16 +114,8 @@ export default class ValidateEventHash extends BaseCommand {
 			}
 
 			if (!hashCheck.isMatching) {
-				this.log(`✗ Hash mismatch`);
-				this.log(`Event ID: ${event.id}`);
-
-				// A database does not tell the hash it calculated, only that it does
-				// not match.
-				if (hashCheck.calculatedHash === undefined) {
-					this.log(`Stored hash: ${event.hash}`);
-				} else {
-					this.log(`Stored hash:     ${event.hash}`);
-					this.log(`Calculated hash: ${hashCheck.calculatedHash}`);
+				for (const line of describeHashMismatch(event, hashCheck.calculatedHash)) {
+					this.log(line);
 				}
 				process.exitCode = 1;
 				return;
@@ -131,9 +125,7 @@ export default class ValidateEventHash extends BaseCommand {
 			this.log(`Event ID: ${event.id}`);
 			this.log(`Hash: ${event.hash}`);
 		} catch (error) {
-			this.log(
-				`✗ Failed to validate event hash: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			this.log(`✗ Failed to validate event hash: ${describeError(error)}`);
 			process.exitCode = 1;
 		}
 	}

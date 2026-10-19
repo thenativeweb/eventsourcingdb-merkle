@@ -56,20 +56,19 @@ export const getSource = (flags: {
 
 // readEvents reads the events of a source, up to the given last event if there
 // is one, so that the Merkle root of an earlier state can be calculated again
-// from a source that has grown since. A last event that the source does not
-// hold is refused rather than taken as the end, since the root would then cover
-// other events than the ones it was meant to.
+// from a source that has grown since. A database is asked for those events
+// alone, but a bound beyond its latest event reads up to the latest one, so the
+// bound is checked against what was read, for either source: a last event that
+// the source does not hold is refused rather than taken as the end, since the
+// root would then cover other events than the ones it was meant to.
 export const readEvents = async (
 	source: Source,
 	{ lastEventId }: { lastEventId?: string } = {},
 ): Promise<ChainEvent[]> => {
-	if (source.type === 'database') {
-		const events = await readDatabase(source.url, source.apiToken, { lastEventId });
-
-		return events.map(fromDatabaseEvent);
-	}
-
-	const events = (await readBackupFile(source.filePath)).map(fromBackupEntry);
+	const events =
+		source.type === 'database'
+			? (await readDatabase(source.url, source.apiToken, { lastEventId })).map(fromDatabaseEvent)
+			: (await readBackupFile(source.filePath)).map(fromBackupEntry);
 	if (lastEventId === undefined) {
 		return events;
 	}
@@ -78,7 +77,7 @@ export const readEvents = async (
 	const index =
 		last === undefined ? -1 : events.findIndex(event => parseEventId(event.id) === last);
 	if (index === -1) {
-		throw new Error(`the backup holds no event with ID ${lastEventId}`);
+		throw new Error(`the ${source.type} holds no event with ID ${lastEventId}`);
 	}
 
 	return events.slice(0, index + 1);

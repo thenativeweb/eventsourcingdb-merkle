@@ -1,5 +1,6 @@
 import BaseCommand from '../lib/BaseCommand.js';
 import { validateChain } from '../lib/chainValidator.js';
+import { describeError } from '../lib/describeError.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
 
 export default class ValidateChain extends BaseCommand {
@@ -46,9 +47,7 @@ export default class ValidateChain extends BaseCommand {
 
 			this.log(`✓ Chain is valid (${result.totalEvents} events)`);
 		} catch (error) {
-			this.log(
-				`✗ Failed to validate chain: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			this.log(`✗ Failed to validate chain: ${describeError(error)}`);
 			process.exitCode = 1;
 		}
 	}

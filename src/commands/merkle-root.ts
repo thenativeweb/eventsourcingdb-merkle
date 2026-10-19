@@ -1,5 +1,6 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
+import { describeError } from '../lib/describeError.js';
 import { parseEventId } from '../lib/eventId.js';
 import { buildMerkleRoot } from '../lib/merkleTree.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
@@ -49,9 +50,7 @@ export default class MerkleRoot extends BaseCommand {
 			this.log(`Total events: ${events.length}`);
 			this.log(`Last event ID: ${events.at(-1)?.id}`);
 		} catch (error) {
-			this.log(
-				`✗ Failed to calculate Merkle root: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			this.log(`✗ Failed to calculate Merkle root: ${describeError(error)}`);
 			process.exitCode = 1;
 		}
 	}

@@ -1,6 +1,7 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { findEventById } from '../lib/chainEvent.js';
+import { describeError } from '../lib/describeError.js';
 import { parseEventId } from '../lib/eventId.js';
 import { generateMerkleProof } from '../lib/merkleTree.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
@@ -14,6 +15,7 @@ export default class GetProof extends BaseCommand {
 		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42',
 		'<%= config.bin %> <%= command.id %> --backup=/path/to/backup.json --event-id=0 --json',
 		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42 --last-event-id=1234566',
+		'<%= config.bin %> <%= command.id %> --esdb-url=http://localhost:3000 --esdb-api-token="$ESDB_API_TOKEN" --event-id=42',
 	];
 
 	static override flags = {
@@ -98,9 +100,7 @@ export default class GetProof extends BaseCommand {
 				this.log(`  ${index + 1}. ${sibling.hash} (${sibling.position})`);
 			}
 		} catch (error) {
-			this.log(
-				`✗ Failed to generate Merkle proof: ${error instanceof Error ? error.message : String(error)}`,
-			);
+			this.log(`✗ Failed to generate Merkle proof: ${describeError(error)}`);
 			process.exitCode = 1;
 		}
 	}

@@ -123,6 +123,14 @@ Stored hash:     abc123...
 Calculated hash: def456...
 ```
 
+Read from a database, the client SDK verifies the hash and keeps the hash it calculated to itself, so the command shows the stored hash only:
+
+```
+✗ Hash mismatch
+Event ID: 42
+Stored hash: abc123...
+```
+
 #### Validating an Event from JSON
 
 You can also validate an event provided as a JSON string. This is useful when you receive an event from an external source and want to verify its hash without having access to the backup file. The command takes a line of a backup, a line of `read-events`, or an event on its own, with its hash:

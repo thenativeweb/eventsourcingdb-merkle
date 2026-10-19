@@ -27,6 +27,8 @@ const run = (args: string[]): { output: string; exitCode: number } => {
 // an update to EventSourcingDB 1.3: the events that release 1.2.0 wrote, restored
 // from its backup, followed by events that the preview of 1.3 wrote.
 describe('reading a running database', () => {
+	// Only the preview of EventSourcingDB 1.3 writes hashes of version 2 and
+	// offers the v2 API yet.
 	const container = new Container().withImageTag('preview');
 	let source: string[] = [];
 
@@ -142,12 +144,28 @@ describe('reading a running database', () => {
 		assert.strictEqual(output, '✗ Event with ID 9 not found\n');
 	});
 
-	it('reports an API token that the database rejects', () => {
+	it('takes an event ID in another notation of the same number, as for a backup', () => {
+		const { output, exitCode } = run(['validate-event-hash', ...source, '--event-id=03']);
+
+		assert.strictEqual(exitCode, 0, output);
+		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 3\n'), output);
+	});
+
+	it('reports an event ID that names no number as not found, as for a backup', () => {
+		const { output, exitCode } = run(['validate-event-hash', ...source, '--event-id=abc']);
+
+		assert.strictEqual(exitCode, 1);
+		assert.strictEqual(output, '✗ Event with ID abc not found\n');
+	});
+
+	it('reports an API token that the database rejects, without naming it', () => {
 		const [url] = source;
-		const { output, exitCode } = run(['validate-chain', url ?? '', '--esdb-api-token=wrong']);
+		const token = 'not-the-token-of-this-database';
+		const { output, exitCode } = run(['validate-chain', url ?? '', `--esdb-api-token=${token}`]);
 
 		assert.strictEqual(exitCode, 1);
 		assert.ok(output.startsWith('✗ Failed to validate chain: '), output);
+		assert.ok(!output.includes(token), output);
 	});
 });
 
@@ -180,6 +198,33 @@ describe('reading a running database before version 2 of the API', () => {
 
 		assert.strictEqual(exitCode, 0, output);
 		assert.strictEqual(output, '✓ Chain is valid (1 events)\n');
+	});
+
+	it('takes an event ID in another notation of the same number', () => {
+		const { output, exitCode } = run([
+			'validate-event-hash',
+			`--esdb-url=${container.getBaseUrl().toString()}`,
+			`--esdb-api-token=${container.getApiToken()}`,
+			'--event-id=00',
+		]);
+
+		assert.strictEqual(exitCode, 0, output);
+		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 0\n'), output);
+	});
+});
+
+describe('reading a database that does not answer', () => {
+	it('names the reason why it could not be reached', () => {
+		const { output, exitCode } = run([
+			'validate-chain',
+			// Nothing listens on this port, so the connection is refused.
+			'--esdb-url=http://127.0.0.1:47391',
+			'--esdb-api-token=secret',
+		]);
+
+		assert.strictEqual(exitCode, 1);
+		assert.ok(output.startsWith('✗ Failed to validate chain: fetch failed: '), output);
+		assert.ok(output.includes('ECONNREFUSED'), output);
 	});
 });
 
