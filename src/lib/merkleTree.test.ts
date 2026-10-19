@@ -10,12 +10,6 @@ import {
 } from './merkleTree.js';
 import { buildVersion1Root } from './merkleTreeVersion1.js';
 
-const hashes = ['abc123', 'esdb:hash:v2:def456', 'esdb:hash:v2:0789ab'];
-const saltKey = Buffer.from(
-	'00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
-	'hex',
-);
-
 const sha256 = (...parts: (Buffer | string)[]): Buffer => {
 	const hash = createHash('sha256');
 	for (const part of parts) {
@@ -24,6 +18,19 @@ const sha256 = (...parts: (Buffer | string)[]): Buffer => {
 
 	return hash.digest();
 };
+
+// Stored hashes of either version, in the form in which EventSourcingDB stores
+// them.
+const hashes = [
+	sha256('first').toString('hex'),
+	`esdb:hash:v2:${sha256('second').toString('hex')}`,
+	`esdb:hash:v2:${sha256('third').toString('hex')}`,
+];
+const [firstHash = '', secondHash = '', thirdHash = ''] = hashes;
+const saltKey = Buffer.from(
+	'00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
+	'hex',
+);
 
 // The tree of version 2 over the three hashes, calculated here step by step: a
 // leaf is the hash of 0x00 followed by its salt, if any, and the stored hash as
@@ -72,7 +79,7 @@ describe('generateMerkleProof', () => {
 		const expected = getExpectedTree([]);
 
 		assert.deepStrictEqual(generateMerkleProof(hashes, 0, { treeVersion: 2 }), {
-			eventHash: 'abc123',
+			eventHash: firstHash,
 			siblingHashes: [
 				{ hash: expected.leaves[1]?.toString('hex'), position: 'right' },
 				{ hash: expected.leaves[2]?.toString('hex'), position: 'right' },
@@ -85,8 +92,8 @@ describe('generateMerkleProof', () => {
 		const expected = getExpectedTree(hashes.map(getSalt));
 
 		assert.deepStrictEqual(generateMerkleProof(hashes, 2, { treeVersion: 2, saltKey }), {
-			eventHash: 'esdb:hash:v2:0789ab',
-			salt: getSalt('esdb:hash:v2:0789ab').toString('hex'),
+			eventHash: thirdHash,
+			salt: getSalt(thirdHash).toString('hex'),
 			siblingHashes: [{ hash: expected.firstTwo.toString('hex'), position: 'left' }],
 			merkleRoot: expected.root,
 		});
@@ -138,8 +145,8 @@ describe('verifyMerkleProof', () => {
 	});
 
 	for (const [name, tampered] of [
-		['another event hash', { ...proof, eventHash: 'abc124' }],
-		['another salt', { ...proof, salt: getSalt('abc124').toString('hex') }],
+		['another event hash', { ...proof, eventHash: secondHash }],
+		['another salt', { ...proof, salt: getSalt(secondHash).toString('hex') }],
 		['no salt', { ...proof, salt: undefined }],
 		['another root', { ...proof, merkleRoot: getExpectedTree([]).root }],
 		['a root without the version', { ...proof, merkleRoot: proof.merkleRoot.slice(15) }],
@@ -159,6 +166,21 @@ describe('verifyMerkleProof', () => {
 			assert.strictEqual(verifyMerkleProof(tampered as unknown as typeof proof), false);
 		});
 	}
+
+	// The data of a leaf is its salt followed by the stored hash, so moving the
+	// first 32 bytes of the hash into the salt keeps the data of the leaf, and
+	// only the form of the hash tells the two apart.
+	it('rejects a proof of version 2 that names the first bytes of its event hash as its salt', () => {
+		const unsalted = generateMerkleProof(hashes, 1, { treeVersion: 2 });
+		const forged = {
+			...unsalted,
+			salt: Buffer.from(secondHash).subarray(0, 32).toString('hex'),
+			eventHash: secondHash.slice(32),
+		};
+
+		assert.strictEqual(verifyMerkleProof(unsalted), true);
+		assert.strictEqual(verifyMerkleProof(forged), false);
+	});
 });
 
 describe('getMerkleTreeVersion', () => {
@@ -183,8 +205,22 @@ describe('findProofStructureProblem', () => {
 	const version1Proof = generateMerkleProof(hashes, 0, { treeVersion: 1 });
 	const version2Proof = generateMerkleProof(hashes, 0, { treeVersion: 2, saltKey });
 
+	const eventHashProblem = 'The event hash has to be a hash of version 1 or 2';
+	const siblingProblem =
+		'Every sibling has to have a hash of 64 hexadecimal digits, and the position left or right';
+	const [sibling] = version2Proof.siblingHashes;
+	const withFirstSibling = (firstSibling: unknown): unknown => ({
+		...version2Proof,
+		siblingHashes: [firstSibling, ...version2Proof.siblingHashes.slice(1)],
+	});
+
 	for (const [name, proof, problem] of [
 		['a proof of version 1', version1Proof, undefined],
+		[
+			'a proof of version 1 of any event hash',
+			{ ...version1Proof, eventHash: 'abc123' },
+			undefined,
+		],
 		['a proof of version 2 with a salt', version2Proof, undefined],
 		['a proof of version 2 without a salt', { ...version2Proof, salt: undefined }, undefined],
 		['no object', 'abc', fieldsProblem],
@@ -210,6 +246,40 @@ describe('findProofStructureProblem', () => {
 			{ ...version2Proof, salt: null },
 			'The salt has to be 64 hexadecimal digits',
 		],
+		['an event hash of version 2', { ...version2Proof, eventHash: secondHash }, undefined],
+		['an event hash that is no hash', { ...version2Proof, eventHash: 'abc123' }, eventHashProblem],
+		[
+			'an event hash without its first bytes',
+			{ ...version2Proof, eventHash: secondHash.slice(32) },
+			eventHashProblem,
+		],
+		[
+			'an event hash in upper case',
+			{ ...version2Proof, eventHash: firstHash.toUpperCase() },
+			eventHashProblem,
+		],
+		[
+			'an event hash of a version the tool does not know',
+			{ ...version2Proof, eventHash: secondHash.replace('v2', 'v3') },
+			eventHashProblem,
+		],
+		[
+			'a sibling with text after its hash',
+			withFirstSibling({ ...sibling, hash: `${sibling?.hash}zz` }),
+			siblingProblem,
+		],
+		[
+			'a sibling with a digit too few',
+			withFirstSibling({ ...sibling, hash: sibling?.hash.slice(1) }),
+			siblingProblem,
+		],
+		[
+			'a sibling on neither side',
+			withFirstSibling({ ...sibling, position: 'middle' }),
+			siblingProblem,
+		],
+		['a sibling that is no object', withFirstSibling('abc123'), siblingProblem],
+		['a sibling that is null', withFirstSibling(null), siblingProblem],
 	] as const) {
 		it(`finds ${problem === undefined ? 'nothing' : 'a problem'} in ${name}`, () => {
 			assert.strictEqual(findProofStructureProblem(proof), problem);

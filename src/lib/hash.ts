@@ -62,6 +62,12 @@ export const assertKnownHashVersion = (storedHash: string): void => {
 	throw new UnsupportedHashVersionError(version);
 };
 
+// A stored hash of version 1 is a SHA-256 in hexadecimal, and one of version 2
+// the same after its prefix, as EventSourcingDB writes them.
+const knownStoredHashPattern = new RegExp(`^(${hashVersion2Prefix})?[0-9a-f]{64}$`, 'u');
+
+export const isKnownStoredHash = (text: string): boolean => knownStoredHashPattern.test(text);
+
 // calculateEventHash computes the hash of an event in the version that its
 // stored hash names, since an event keeps the version of the hash it was
 // written with. An event without a stored hash names no version, which is what

@@ -127,28 +127,29 @@ describe('verify-proof', () => {
 		// A proof of version 2 over a tree of a single, salted leaf, whose root is
 		// the hash of that leaf.
 		const salt = '1010101010101010101010101010101010101010101010101010101010101010';
+		const eventHash = `esdb:hash:v2:${'ab'.repeat(32)}`;
 		const proof = {
 			eventId: '0',
-			eventHash: 'abc123',
+			eventHash,
 			salt,
 			siblingHashes: [],
 			merkleRoot: `esdb:merkle:v2:${createHash('sha256')
 				.update(Buffer.from([0x00]))
 				.update(Buffer.from(salt, 'hex'))
-				.update('abc123')
+				.update(eventHash)
 				.digest('hex')}`,
 		};
 
 		it('verifies a proof of version 2 with its salt', () => {
 			assert.deepStrictEqual(run(proof), {
-				output: `✓ Merkle proof is valid\nEvent ID: 0\nEvent Hash: abc123\nMerkle Root: ${proof.merkleRoot}\n`,
+				output: `✓ Merkle proof is valid\nEvent ID: 0\nEvent Hash: ${eventHash}\nMerkle Root: ${proof.merkleRoot}\n`,
 				exitCode: 0,
 			});
 		});
 
 		it('rejects a proof of version 2 with another salt', () => {
 			assert.deepStrictEqual(run({ ...proof, salt: '11'.repeat(32) }), {
-				output: `✗ Merkle proof is invalid\nEvent ID: 0\nEvent Hash: abc123\nMerkle Root: ${proof.merkleRoot}\n`,
+				output: `✗ Merkle proof is invalid\nEvent ID: 0\nEvent Hash: ${eventHash}\nMerkle Root: ${proof.merkleRoot}\n`,
 				exitCode: 1,
 			});
 		});
@@ -158,6 +159,24 @@ describe('verify-proof', () => {
 				output: '✗ Invalid proof structure\nThe salt has to be 64 hexadecimal digits\n',
 				exitCode: 1,
 			});
+		});
+
+		it('refuses an event hash that is no hash of version 1 or 2', () => {
+			assert.deepStrictEqual(run({ ...proof, eventHash: 'abc123' }), {
+				output: '✗ Invalid proof structure\nThe event hash has to be a hash of version 1 or 2\n',
+				exitCode: 1,
+			});
+		});
+
+		it('refuses a sibling that is no hash on one side', () => {
+			assert.deepStrictEqual(
+				run({ ...proof, siblingHashes: [{ hash: `${'ab'.repeat(32)}zz`, position: 'left' }] }),
+				{
+					output:
+						'✗ Invalid proof structure\nEvery sibling has to have a hash of 64 hexadecimal digits, and the position left or right\n',
+					exitCode: 1,
+				},
+			);
 		});
 
 		it('refuses a salt in a proof of version 1', () => {

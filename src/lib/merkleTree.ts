@@ -1,3 +1,4 @@
+import { isKnownStoredHash } from './hash.js';
 import { isObject } from './isObject.js';
 import {
 	buildVersion1Root,
@@ -101,10 +102,20 @@ export const getMerkleTreeVersion = (merkleRoot: string): MerkleTreeVersion => {
 	throw new UnsupportedMerkleTreeVersionError(version);
 };
 
+const isSibling = (sibling: unknown): boolean =>
+	isObject(sibling) &&
+	typeof sibling.hash === 'string' &&
+	digestPattern.test(sibling.hash) &&
+	(sibling.position === 'left' || sibling.position === 'right');
+
 // findProofStructureProblem describes what keeps a proof from being one that
 // can be verified, or returns undefined if nothing does. A salt is part of the
 // structure, since whether a proof may have one depends on the version of its
-// tree alone.
+// tree alone. So is the form of the event hash in version 2: the data of a leaf
+// is its salt followed by the stored hash, with nothing between them that tells
+// where the salt ends, so without that form, a proof whose salt took the first
+// bytes of the hash would pass for a proof of the rest of it. With it, the data
+// of a leaf has other lengths with a salt than without one.
 export const findProofStructureProblem = (proof: unknown): string | undefined => {
 	if (
 		!isObject(proof) ||
@@ -121,50 +132,34 @@ export const findProofStructureProblem = (proof: unknown): string | undefined =>
 	if (getMerkleTreeVersion(proof.merkleRoot) === 1) {
 		return hasSalt ? 'A proof of Merkle tree version 1 has no salt' : undefined;
 	}
+	if (!isKnownStoredHash(proof.eventHash)) {
+		return 'The event hash has to be a hash of version 1 or 2';
+	}
 	if (hasSalt && (typeof proof.salt !== 'string' || !digestPattern.test(proof.salt))) {
 		return 'The salt has to be 64 hexadecimal digits';
+	}
+	if (!proof.siblingHashes.every(isSibling)) {
+		return 'Every sibling has to have a hash of 64 hexadecimal digits, and the position left or right';
 	}
 
 	return undefined;
 };
 
-const parseAuditPath = (siblingHashes: unknown[]): AuditPathNode[] | undefined => {
-	const auditPath: AuditPathNode[] = [];
-
-	for (const sibling of siblingHashes) {
-		if (!isObject(sibling)) {
-			return undefined;
-		}
-
-		const { hash, position } = sibling;
-		if (typeof hash !== 'string' || !digestPattern.test(hash)) {
-			return undefined;
-		}
-		if (position !== 'left' && position !== 'right') {
-			return undefined;
-		}
-
-		auditPath.push({ hash: Buffer.from(hash, 'hex'), position });
-	}
-
-	return auditPath;
-};
-
 // verifyMerkleProof tells whether a proof leads from the hash of its event to
-// its root, in the version of the tree that the root names. It expects a proof
-// in which findProofStructureProblem finds nothing. A sibling that is not a
-// digest on one side of the path proves nothing, as does a sibling with another
-// hash.
+// its root, in the version of the tree that the root names. A proof in which
+// findProofStructureProblem finds a problem proves nothing.
 export const verifyMerkleProof = (proof: Omit<MerkleProof, 'eventId'>): boolean => {
+	if (findProofStructureProblem(proof) !== undefined) {
+		return false;
+	}
 	if (getMerkleTreeVersion(proof.merkleRoot) === 1) {
 		return verifyVersion1Proof(proof);
 	}
 
-	const auditPath = parseAuditPath(proof.siblingHashes);
-	if (auditPath === undefined) {
-		return false;
-	}
-
+	const auditPath: AuditPathNode[] = proof.siblingHashes.map(({ hash, position }) => ({
+		hash: Buffer.from(hash, 'hex'),
+		position,
+	}));
 	const salt = proof.salt === undefined ? undefined : Buffer.from(proof.salt, 'hex');
 	const root = calculateRootFromAuditPath(getLeafHash(proof.eventHash, salt), auditPath);
 
