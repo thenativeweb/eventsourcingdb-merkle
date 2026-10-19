@@ -112,4 +112,25 @@ describe('merkle-root', () => {
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
 		assert.match(output, /Total events: 2/);
 	});
+
+	it('builds the Merkle tree from the hashes as they are stored, of either version', () => {
+		const output = execSync(
+			'node ./dist/index.js merkle-root test-fixtures/backup-with-both-hash-versions.ndjson',
+			{ encoding: 'utf-8' },
+		);
+
+		const hashes = readFileSync('test-fixtures/backup-with-both-hash-versions.ndjson', 'utf-8')
+			.trimEnd()
+			.split('\n')
+			.map(line => JSON.parse(line) as { type: string; payload: { hash?: string } })
+			.filter(line => line.type === 'event')
+			.map(line => line.payload.hash ?? '');
+		assert.strictEqual(hashes.length, 4);
+		const [first, second, third, fourth] = hashes;
+		const pair = (left?: string, right?: string): string =>
+			createHash('sha256').update(`${left}${right}`).digest('hex');
+		const expectedRoot = pair(pair(first, second), pair(third, fourth));
+
+		assert.strictEqual(output, `Merkle Root: ${expectedRoot}\nTotal events: 4\n`);
+	});
 });

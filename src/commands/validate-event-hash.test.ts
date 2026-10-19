@@ -191,4 +191,87 @@ describe('validate-event-hash', () => {
 			});
 		}
 	});
+
+	describe('with both versions of the hash', () => {
+		const readEventsLines = readFileSync(
+			'test-fixtures/read-events-with-both-hash-versions.ndjson',
+			'utf-8',
+		)
+			.trimEnd()
+			.split('\n');
+
+		const runWithEvent = (event: string): { output: string; exitCode: number } => {
+			try {
+				const output = execFileSync(
+					'node',
+					['./dist/index.js', 'validate-event-hash', `--event=${event}`],
+					{
+						encoding: 'utf-8',
+					},
+				);
+				return { output, exitCode: 0 };
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		it('validates the hash of an event of either version from a backup', () => {
+			for (const eventId of ['1', '3']) {
+				const output = execSync(
+					`node ./dist/index.js validate-event-hash --file test-fixtures/backup-with-both-hash-versions.ndjson --event-id ${eventId}`,
+					{ encoding: 'utf-8' },
+				);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(output, /✓ Hash is valid/);
+			}
+		});
+
+		for (const [index, line] of readEventsLines.entries()) {
+			it(`validates the hash of event ${index} given as a line of read-events`, () => {
+				const { output, exitCode } = runWithEvent(line);
+
+				assert.strictEqual(exitCode, 0, output);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(output, /✓ Hash is valid/);
+			});
+
+			it(`validates the hash of event ${index} given as an event that carries its hash`, () => {
+				const event = line.slice(line.indexOf('{"source"'), -1);
+				assert.ok((JSON.parse(event) as { hash?: string }).hash);
+
+				const { output, exitCode } = runWithEvent(event);
+
+				assert.strictEqual(exitCode, 0, output);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(output, /✓ Hash is valid/);
+			});
+		}
+
+		it('reports a hash of a version it does not know as unsupported', () => {
+			const [line] = readEventsLines.slice(-1);
+			assert.ok(line);
+			const storedHash = `esdb:hash:v3:${'0'.repeat(64)}`;
+			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+			const event = line.replace(/"hash":"[^"]*"/u, `"hash":"${storedHash}"`);
+
+			const { output, exitCode } = runWithEvent(event);
+
+			assert.strictEqual(exitCode, 1);
+			assert.strictEqual(
+				output,
+				`✗ Unsupported hash version: v3\nEvent ID: 3\nStored hash: ${storedHash}\n`,
+			);
+		});
+
+		it('refuses an event in a form it does not know', () => {
+			const { output, exitCode } = runWithEvent('{"type":"event","payload":{"id":"0"}}');
+
+			assert.strictEqual(exitCode, 2);
+			assert.strictEqual(
+				output,
+				'✗ --event is neither an event nor a line of a backup or of read-events\nSee more help with --help\n',
+			);
+		});
+	});
 });

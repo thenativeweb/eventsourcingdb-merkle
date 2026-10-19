@@ -1,9 +1,9 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { findEventById, readBackupFile } from '../lib/backupReader.js';
-import { calculateEventHash } from '../lib/hash.js';
-import { getCompactValue } from '../lib/rawJson.js';
-import type { BackupEntry, CloudEvent } from '../lib/types.js';
+import { readEventText } from '../lib/eventText.js';
+import { calculateEventHash, UnsupportedHashVersionError } from '../lib/hash.js';
+import type { CloudEvent } from '../lib/types.js';
 
 export default class ValidateEventHash extends BaseCommand {
 	static override description =
@@ -50,28 +50,33 @@ export default class ValidateEventHash extends BaseCommand {
 		const eventId = flags['event-id'];
 
 		try {
-			let entry: BackupEntry | undefined;
 			let event: CloudEvent;
 			let storedHash: string;
 			let originalDataString: string | undefined;
 
 			if (flags.event) {
-				// Parse event from JSON string
-				const parsed = JSON.parse(flags.event) as BackupEntry | CloudEvent;
+				const eventFromText = readEventText(flags.event);
 
-				// Check if it's a BackupEntry or a CloudEvent
-				if ('type' in parsed && parsed.type === 'event' && 'payload' in parsed) {
-					entry = parsed as BackupEntry;
-					event = entry.payload.event;
-					storedHash = entry.payload.hash;
-					originalDataString = getCompactValue(flags.event, ['payload', 'event', 'data']);
-				} else {
-					event = parsed as CloudEvent;
+				if (eventFromText === undefined) {
+					this.log('✗ --event is neither an event nor a line of a backup or of read-events');
+					this.log('See more help with --help');
+					process.exitCode = 2;
+					return;
+				}
+
+				if (eventFromText.storedHash === undefined) {
 					// No stored hash to compare against
-					const calculatedHash = calculateEventHash(event, getCompactValue(flags.event, ['data']));
+					const calculatedHash = calculateEventHash(
+						eventFromText.event,
+						eventFromText.originalDataString,
+					);
 					this.log(`Calculated hash: ${calculatedHash}`);
 					return;
 				}
+
+				event = eventFromText.event;
+				storedHash = eventFromText.storedHash;
+				originalDataString = eventFromText.originalDataString;
 			} else {
 				// Read from file
 				if (!filePath || !eventId) {
@@ -81,7 +86,7 @@ export default class ValidateEventHash extends BaseCommand {
 				}
 
 				const entries = await readBackupFile(filePath);
-				entry = findEventById(entries, eventId);
+				const entry = findEventById(entries, eventId);
 
 				if (!entry) {
 					this.log(`✗ Event with ID ${eventId} not found`);
@@ -94,7 +99,22 @@ export default class ValidateEventHash extends BaseCommand {
 				originalDataString = entry.payload.originalDataString;
 			}
 
-			const calculatedHash = calculateEventHash(event, originalDataString);
+			// A hash of a version the tool does not know is no mismatch, so it is
+			// reported apart from one, with the hash that names the version.
+			let calculatedHash: string;
+			try {
+				calculatedHash = calculateEventHash(event, originalDataString, storedHash);
+			} catch (error) {
+				if (!(error instanceof UnsupportedHashVersionError)) {
+					throw error;
+				}
+
+				this.log(`✗ ${error.message}`);
+				this.log(`Event ID: ${event.id}`);
+				this.log(`Stored hash: ${storedHash}`);
+				process.exitCode = 1;
+				return;
+			}
 
 			if (calculatedHash !== storedHash) {
 				this.log(`✗ Hash mismatch`);

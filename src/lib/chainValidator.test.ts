@@ -52,4 +52,24 @@ describe('validateChain', () => {
 		assert.strictEqual(result.isValid, false);
 		assert.ok(result.errors.some(e => e.message.includes('null predecessor hash')));
 	});
+
+	it('validates a chain that holds events of both versions of the hash', async () => {
+		const entries = await readBackupFile('test-fixtures/backup-with-both-hash-versions.ndjson');
+		const result = validateChain(entries);
+
+		assert.deepStrictEqual(result, { isValid: true, totalEvents: 4, errors: [] });
+	});
+
+	it('reports a hash of a version it does not know as unsupported', async () => {
+		const entries = await readBackupFile('test-fixtures/backup-with-both-hash-versions.ndjson');
+		const lastEntry = entries.at(-1);
+		assert.ok(lastEntry);
+		lastEntry.payload.hash = `esdb:hash:v3:${'0'.repeat(64)}`;
+
+		const result = validateChain(entries);
+
+		assert.deepStrictEqual(result.errors, [
+			{ eventId: '3', message: 'Unsupported hash version: v3' },
+		]);
+	});
 });

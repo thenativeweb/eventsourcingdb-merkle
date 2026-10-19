@@ -1,4 +1,4 @@
-import { calculateEventHash } from './hash.js';
+import { calculateEventHash, UnsupportedHashVersionError } from './hash.js';
 import type { BackupEntry } from './types.js';
 
 export interface ChainValidationResult {
@@ -19,7 +19,11 @@ export const validateChain = (entries: BackupEntry[]): ChainValidationResult => 
 
 		// Validate hash
 		try {
-			const calculatedHash = calculateEventHash(event, entry.payload.originalDataString);
+			const calculatedHash = calculateEventHash(
+				event,
+				entry.payload.originalDataString,
+				storedHash,
+			);
 			if (calculatedHash !== storedHash) {
 				errors.push({
 					eventId: event.id,
@@ -29,7 +33,10 @@ export const validateChain = (entries: BackupEntry[]): ChainValidationResult => 
 		} catch (error) {
 			errors.push({
 				eventId: event.id,
-				message: `Failed to calculate hash: ${error instanceof Error ? error.message : String(error)}`,
+				message:
+					error instanceof UnsupportedHashVersionError
+						? error.message
+						: `Failed to calculate hash: ${error instanceof Error ? error.message : String(error)}`,
 			});
 		}
 
