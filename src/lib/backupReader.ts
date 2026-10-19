@@ -296,14 +296,3 @@ const isSameEvent = (anchor: unknown, endedAt: AnchorEvent | undefined): boolean
 
 	return anchorId !== undefined && anchorId === parseEventId(endedAt.id) && hash === endedAt.hash;
 };
-
-// findEventById compares IDs as numbers, as EventSourcingDB reads them, so that
-// an ID in another notation of the same number finds the event.
-export const findEventById = (entries: BackupEntry[], eventId: string): BackupEntry | undefined => {
-	const wanted = parseEventId(eventId);
-	if (wanted === undefined) {
-		return undefined;
-	}
-
-	return entries.find(entry => parseEventId(entry.payload.event.id) === wanted);
-};

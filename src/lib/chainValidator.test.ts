@@ -1,12 +1,13 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
 import { readBackupFile } from './backupReader.js';
+import { fromBackupEntry } from './chainEvent.js';
 import { validateChain } from './chainValidator.js';
 
 describe('validateChain', () => {
 	it('validates a correct chain', async () => {
 		const entries = await readBackupFile('test-fixtures/test-backup.json');
-		const result = validateChain(entries);
+		const result = validateChain(entries.map(fromBackupEntry));
 
 		assert.strictEqual(result.isValid, true);
 		assert.strictEqual(result.totalEvents, 4);
@@ -20,7 +21,7 @@ describe('validateChain', () => {
 		assert.ok(secondEntry);
 		secondEntry.payload.hash = 'tampered';
 
-		const result = validateChain(entries);
+		const result = validateChain(entries.map(fromBackupEntry));
 
 		assert.strictEqual(result.isValid, false);
 		assert.strictEqual(result.errors.length, 2); // Hash mismatch + predecessor hash mismatch
@@ -34,7 +35,7 @@ describe('validateChain', () => {
 		assert.ok(thirdEntry);
 		thirdEntry.payload.event.predecessorhash = 'tampered';
 
-		const result = validateChain(entries);
+		const result = validateChain(entries.map(fromBackupEntry));
 
 		assert.strictEqual(result.isValid, false);
 		assert.ok(result.errors.some(e => e.message.includes('Predecessor hash mismatch')));
@@ -47,7 +48,7 @@ describe('validateChain', () => {
 		assert.ok(firstEntry);
 		firstEntry.payload.event.predecessorhash = 'invalid';
 
-		const result = validateChain(entries);
+		const result = validateChain(entries.map(fromBackupEntry));
 
 		assert.strictEqual(result.isValid, false);
 		assert.ok(result.errors.some(e => e.message.includes('null predecessor hash')));
@@ -55,7 +56,7 @@ describe('validateChain', () => {
 
 	it('validates a chain that holds events of both versions of the hash', async () => {
 		const entries = await readBackupFile('test-fixtures/backup-with-both-hash-versions.ndjson');
-		const result = validateChain(entries);
+		const result = validateChain(entries.map(fromBackupEntry));
 
 		assert.deepStrictEqual(result, { isValid: true, totalEvents: 4, errors: [] });
 	});
@@ -66,10 +67,26 @@ describe('validateChain', () => {
 		assert.ok(lastEntry);
 		lastEntry.payload.hash = `esdb:hash:v3:${'0'.repeat(64)}`;
 
-		const result = validateChain(entries);
+		const result = validateChain(entries.map(fromBackupEntry));
 
 		assert.deepStrictEqual(result.errors, [
 			{ eventId: '3', message: 'Unsupported hash version: v3' },
+		]);
+	});
+
+	it('reports a mismatch without the calculated hash where the source does not tell it', () => {
+		const hash = `esdb:hash:v2:${'1'.repeat(64)}`;
+		const result = validateChain([
+			{
+				id: '0',
+				hash,
+				predecessorhash: '0'.repeat(64),
+				checkHash: () => ({ isMatching: false, calculatedHash: undefined }),
+			},
+		]);
+
+		assert.deepStrictEqual(result.errors, [
+			{ eventId: '0', message: `Hash mismatch: expected ${hash}` },
 		]);
 	});
 });

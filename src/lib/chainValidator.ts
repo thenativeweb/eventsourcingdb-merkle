@@ -1,5 +1,5 @@
-import { calculateEventHash, UnsupportedHashVersionError } from './hash.js';
-import type { BackupEntry } from './types.js';
+import type { ChainEvent } from './chainEvent.js';
+import { UnsupportedHashVersionError } from './hash.js';
 
 export interface ChainValidationResult {
 	isValid: boolean;
@@ -10,24 +10,22 @@ export interface ChainValidationResult {
 	}>;
 }
 
-export const validateChain = (entries: BackupEntry[]): ChainValidationResult => {
+export const validateChain = (events: ChainEvent[]): ChainValidationResult => {
 	const errors: Array<{ eventId: string; message: string }> = [];
 
-	for (const [i, entry] of entries.entries()) {
-		const event = entry.payload.event;
-		const storedHash = entry.payload.hash;
+	for (const [i, event] of events.entries()) {
+		const storedHash = event.hash;
 
 		// Validate hash
 		try {
-			const calculatedHash = calculateEventHash(
-				event,
-				entry.payload.originalDataString,
-				storedHash,
-			);
-			if (calculatedHash !== storedHash) {
+			const { isMatching, calculatedHash } = event.checkHash();
+			if (!isMatching) {
 				errors.push({
 					eventId: event.id,
-					message: `Hash mismatch: expected ${storedHash}, got ${calculatedHash}`,
+					message:
+						calculatedHash === undefined
+							? `Hash mismatch: expected ${storedHash}`
+							: `Hash mismatch: expected ${storedHash}, got ${calculatedHash}`,
 				});
 			}
 		} catch (error) {
@@ -42,8 +40,8 @@ export const validateChain = (entries: BackupEntry[]): ChainValidationResult => 
 
 		// Validate predecessor hash
 		if (i > 0) {
-			const previousEntry = entries[i - 1];
-			const expectedPredecessorHash = previousEntry?.payload.hash;
+			const previousEvent = events[i - 1];
+			const expectedPredecessorHash = previousEvent?.hash;
 
 			if (event.predecessorhash !== expectedPredecessorHash) {
 				errors.push({
@@ -65,7 +63,7 @@ export const validateChain = (entries: BackupEntry[]): ChainValidationResult => 
 
 	return {
 		isValid: errors.length === 0,
-		totalEvents: entries.length,
+		totalEvents: events.length,
 		errors,
 	};
 };

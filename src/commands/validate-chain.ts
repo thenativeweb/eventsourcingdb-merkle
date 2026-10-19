@@ -1,18 +1,18 @@
-import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
-import { readBackupFile } from '../lib/backupReader.js';
 import { validateChain } from '../lib/chainValidator.js';
+import { getSource, readEvents, sourceFlags } from '../lib/source.js';
 
 export default class ValidateChain extends BaseCommand {
-	static override description = 'Validate the hash chain in an EventSourcingDB backup file';
+	static override description =
+		'Validate the hash chain in an EventSourcingDB backup file or a running EventSourcingDB';
 
 	static override examples = [
 		'<%= config.bin %> <%= command.id %> --backup=backup.json',
-		'<%= config.bin %> <%= command.id %> --backup=/path/to/backup.json',
+		'<%= config.bin %> <%= command.id %> --esdb-url=http://localhost:3000 --esdb-api-token="$ESDB_API_TOKEN"',
 	];
 
 	static override flags = {
-		backup: Flags.string({ description: 'Path to the backup file' }),
+		...sourceFlags,
 	};
 
 	static override args = {};
@@ -20,14 +20,15 @@ export default class ValidateChain extends BaseCommand {
 	public async run(): Promise<void> {
 		const { flags } = await this.parse(ValidateChain);
 
-		if (!flags.backup) {
-			this.refuseCall('--backup must be provided');
+		const source = getSource(flags);
+		if ('refusal' in source) {
+			this.refuseCall(source.refusal);
 			return;
 		}
 
 		try {
-			const entries = await readBackupFile(flags.backup);
-			const result = validateChain(entries);
+			const events = await readEvents(source);
+			const result = validateChain(events);
 
 			if (!result.isValid) {
 				this.log(`✗ Chain validation failed`);

@@ -1,33 +1,29 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
-import { findEventById, readBackupFile } from '../lib/backupReader.js';
+import { type ChainEvent, fromCloudEvent } from '../lib/chainEvent.js';
 import { readEventText } from '../lib/eventText.js';
-import {
-	calculateEventHash,
-	calculateEventHashInEveryVersion,
-	UnsupportedHashVersionError,
-} from '../lib/hash.js';
-import type { CloudEvent } from '../lib/types.js';
+import { calculateEventHashInEveryVersion, UnsupportedHashVersionError } from '../lib/hash.js';
+import { getSource, readEvent, sourceFlags } from '../lib/source.js';
 
 export default class ValidateEventHash extends BaseCommand {
 	static override description =
-		'Validate the hash of a specific event (with or without backup file)';
+		'Validate the hash of a specific event, from a backup file, a running EventSourcingDB, or JSON';
 
 	static override examples = [
 		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42',
+		'<%= config.bin %> <%= command.id %> --esdb-url=http://localhost:3000 --esdb-api-token="$ESDB_API_TOKEN" --event-id=42',
 		// biome-ignore lint/security/noSecrets: This is an example command, not a secret
 		'<%= config.bin %> <%= command.id %> --event=\'{"specversion":"1.0",...}\'',
 	];
 
 	static override flags = {
-		backup: Flags.string({ description: 'Path to the backup file', exclusive: ['event'] }),
+		...sourceFlags,
 		'event-id': Flags.string({
-			description: 'Event ID to validate (requires --backup)',
-			exclusive: ['event'],
+			description: 'Event ID to validate (requires --backup or --esdb-url)',
 		}),
 		event: Flags.string({
 			description: 'JSON string of the event to validate',
-			exclusive: ['backup', 'event-id'],
+			exclusive: ['backup', 'esdb-url', 'event-id'],
 		}),
 	};
 
@@ -35,24 +31,22 @@ export default class ValidateEventHash extends BaseCommand {
 
 	public async run(): Promise<void> {
 		const { flags } = await this.parse(ValidateEventHash);
-
-		if (!flags.backup && !flags.event) {
-			this.refuseCall('Either --backup with --event-id, or --event must be provided');
-			return;
-		}
-
-		if (flags.backup && !flags['event-id']) {
-			this.refuseCall('--event-id is required when using --backup');
-			return;
-		}
-
-		const filePath = flags.backup;
 		const eventId = flags['event-id'];
 
+		if (!flags.backup && !flags['esdb-url'] && !flags.event) {
+			this.refuseCall('Either --backup or --esdb-url with --event-id, or --event must be provided');
+			return;
+		}
+
+		// The token is checked here rather than by oclif, whose message would name
+		// its value.
+		if (flags.event && flags['esdb-api-token']) {
+			this.refuseCall('--event and --esdb-api-token cannot be used together');
+			return;
+		}
+
 		try {
-			let event: CloudEvent;
-			let storedHash: string;
-			let originalDataString: string | undefined;
+			let event: ChainEvent;
 
 			if (flags.event) {
 				const eventFromText = readEventText(flags.event);
@@ -74,36 +68,37 @@ export default class ValidateEventHash extends BaseCommand {
 					return;
 				}
 
-				event = eventFromText.event;
-				storedHash = eventFromText.storedHash;
-				originalDataString = eventFromText.originalDataString;
+				event = fromCloudEvent(
+					eventFromText.event,
+					eventFromText.storedHash,
+					eventFromText.originalDataString,
+				);
 			} else {
-				// Read from file
-				if (!filePath || !eventId) {
-					this.log('✗ File path and event ID are required');
-					process.exitCode = 2;
+				const source = getSource(flags);
+				if ('refusal' in source) {
+					this.refuseCall(source.refusal);
+					return;
+				}
+				if (!eventId) {
+					this.refuseCall('--event-id is required when using --backup or --esdb-url');
 					return;
 				}
 
-				const entries = await readBackupFile(filePath);
-				const entry = findEventById(entries, eventId);
-
-				if (!entry) {
+				const eventFromSource = await readEvent(source, eventId);
+				if (!eventFromSource) {
 					this.log(`✗ Event with ID ${eventId} not found`);
 					process.exitCode = 1;
 					return;
 				}
 
-				event = entry.payload.event;
-				storedHash = entry.payload.hash;
-				originalDataString = entry.payload.originalDataString;
+				event = eventFromSource;
 			}
 
 			// A hash of a version the tool does not know is no mismatch, so it is
 			// reported apart from one, with the hash that names the version.
-			let calculatedHash: string;
+			let hashCheck: ReturnType<ChainEvent['checkHash']>;
 			try {
-				calculatedHash = calculateEventHash(event, originalDataString, storedHash);
+				hashCheck = event.checkHash();
 			} catch (error) {
 				if (!(error instanceof UnsupportedHashVersionError)) {
 					throw error;
@@ -111,23 +106,30 @@ export default class ValidateEventHash extends BaseCommand {
 
 				this.log(`✗ ${error.message}`);
 				this.log(`Event ID: ${event.id}`);
-				this.log(`Stored hash: ${storedHash}`);
+				this.log(`Stored hash: ${event.hash}`);
 				process.exitCode = 1;
 				return;
 			}
 
-			if (calculatedHash !== storedHash) {
+			if (!hashCheck.isMatching) {
 				this.log(`✗ Hash mismatch`);
 				this.log(`Event ID: ${event.id}`);
-				this.log(`Stored hash:     ${storedHash}`);
-				this.log(`Calculated hash: ${calculatedHash}`);
+
+				// A database does not tell the hash it calculated, only that it does
+				// not match.
+				if (hashCheck.calculatedHash === undefined) {
+					this.log(`Stored hash: ${event.hash}`);
+				} else {
+					this.log(`Stored hash:     ${event.hash}`);
+					this.log(`Calculated hash: ${hashCheck.calculatedHash}`);
+				}
 				process.exitCode = 1;
 				return;
 			}
 
 			this.log(`✓ Hash is valid`);
 			this.log(`Event ID: ${event.id}`);
-			this.log(`Hash: ${storedHash}`);
+			this.log(`Hash: ${event.hash}`);
 		} catch (error) {
 			this.log(
 				`✗ Failed to validate event hash: ${error instanceof Error ? error.message : String(error)}`,

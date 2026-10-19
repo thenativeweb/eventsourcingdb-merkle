@@ -211,7 +211,10 @@ describe('validate-chain', () => {
 			assert.fail('Expected command to fail');
 		} catch (error: unknown) {
 			const err = error as Error & { stdout?: string; status?: number };
-			assert.strictEqual(err.stdout, '✗ --backup must be provided\nSee more help with --help\n');
+			assert.strictEqual(
+				err.stdout,
+				'✗ Either --backup or --esdb-url must be provided\nSee more help with --help\n',
+			);
 			assert.strictEqual(err.status, 2);
 		}
 	});

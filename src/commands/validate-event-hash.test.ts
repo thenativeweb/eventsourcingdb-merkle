@@ -126,7 +126,7 @@ describe('validate-event-hash', () => {
 			(error: Error & { stdout?: string }) => {
 				const output = error.stdout || '';
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-				assert.match(output, /✗ --event-id is required when using --backup/);
+				assert.match(output, /✗ --event-id is required when using --backup or --esdb-url/);
 				return true;
 			},
 		);
@@ -141,8 +141,12 @@ describe('validate-event-hash', () => {
 			},
 			(error: Error & { stdout?: string }) => {
 				const output = error.stdout || '';
-				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-				assert.match(output, /✗ Either --backup with --event-id, or --event must be provided/);
+				assert.ok(
+					output.includes(
+						'✗ Either --backup or --esdb-url with --event-id, or --event must be provided',
+					),
+					output,
+				);
 				return true;
 			},
 		);

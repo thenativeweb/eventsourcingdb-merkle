@@ -102,7 +102,10 @@ describe('get-proof', () => {
 			assert.fail('Expected command to fail');
 		} catch (error: unknown) {
 			const err = error as Error & { stdout?: string; status?: number };
-			assert.strictEqual(err.stdout, '✗ --backup must be provided\nSee more help with --help\n');
+			assert.strictEqual(
+				err.stdout,
+				'✗ Either --backup or --esdb-url must be provided\nSee more help with --help\n',
+			);
 			assert.strictEqual(err.status, 2);
 		}
 	});
@@ -187,7 +190,7 @@ describe('get-proof', () => {
 			assert.strictEqual(exitCode, 2);
 			assert.strictEqual(
 				output,
-				'✗ --event-id is required when using --backup\nSee more help with --help\n',
+				'✗ --event-id is required when using --backup or --esdb-url\nSee more help with --help\n',
 			);
 		});
 	});

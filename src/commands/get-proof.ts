@@ -1,13 +1,14 @@
 import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
-import { findEventById, readBackupFile } from '../lib/backupReader.js';
+import { findEventById } from '../lib/chainEvent.js';
 import { parseEventId } from '../lib/eventId.js';
-import { takeEntriesUpTo } from '../lib/lastEventId.js';
 import { generateMerkleProof } from '../lib/merkleTree.js';
+import { getSource, readEvents, sourceFlags } from '../lib/source.js';
 import type { MerkleProof } from '../lib/types.js';
 
 export default class GetProof extends BaseCommand {
-	static override description = 'Generate a Merkle proof for a specific event';
+	static override description =
+		'Generate a Merkle proof for a specific event of an EventSourcingDB backup file or a running EventSourcingDB';
 
 	static override examples = [
 		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42',
@@ -16,7 +17,7 @@ export default class GetProof extends BaseCommand {
 	];
 
 	static override flags = {
-		backup: Flags.string({ description: 'Path to the backup file' }),
+		...sourceFlags,
 		'event-id': Flags.string({ description: 'Event ID to generate proof for' }),
 		'last-event-id': Flags.string({
 			description:
@@ -30,14 +31,15 @@ export default class GetProof extends BaseCommand {
 	public async run(): Promise<void> {
 		const { flags } = await this.parse(GetProof);
 
-		if (!flags.backup) {
-			this.refuseCall('--backup must be provided');
+		const source = getSource(flags);
+		if ('refusal' in source) {
+			this.refuseCall(source.refusal);
 			return;
 		}
 
 		const eventId = flags['event-id'];
 		if (!eventId) {
-			this.refuseCall('--event-id is required when using --backup');
+			this.refuseCall('--event-id is required when using --backup or --esdb-url');
 			return;
 		}
 
@@ -48,12 +50,10 @@ export default class GetProof extends BaseCommand {
 		}
 
 		try {
-			const allEntries = await readBackupFile(flags.backup);
-			const entries =
-				lastEventId === undefined ? allEntries : takeEntriesUpTo(allEntries, lastEventId);
+			const events = await readEvents(source, { lastEventId });
 
 			// An event after the last one is not part of the tree, so it has no
-			// proof against its root, although the backup holds it.
+			// proof against its root, although the source holds it.
 			const eventNumber = parseEventId(eventId);
 			const lastEventNumber = lastEventId === undefined ? undefined : parseEventId(lastEventId);
 			if (
@@ -66,19 +66,19 @@ export default class GetProof extends BaseCommand {
 				return;
 			}
 
-			const entry = findEventById(entries, eventId);
+			const event = findEventById(events, eventId);
 
-			if (!entry) {
+			if (!event) {
 				this.log(`✗ Event with ID ${eventId} not found`);
 				process.exitCode = 1;
 				return;
 			}
 
-			const hashes = entries.map(e => e.payload.hash);
-			const proofData = generateMerkleProof(hashes, entry.payload.hash);
+			const hashes = events.map(e => e.hash);
+			const proofData = generateMerkleProof(hashes, event.hash);
 
 			const proof: MerkleProof = {
-				eventId: entry.payload.event.id,
+				eventId: event.id,
 				...proofData,
 			};
 
