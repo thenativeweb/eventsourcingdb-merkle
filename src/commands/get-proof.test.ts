@@ -351,6 +351,23 @@ describe('get-proof', () => {
 			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
 		});
 
+		it('proves the last of three events against the root of version 1, which pairs it with itself', () => {
+			const threeEvents = '--backup=test-fixtures/backup-v2-full.ndjson';
+			const { output, exitCode } = run('get-proof', [
+				threeEvents,
+				'--event-id=2',
+				'--tree-version=1',
+				'--json',
+			]);
+			assert.strictEqual(exitCode, 0, output);
+
+			assert.strictEqual(
+				`Merkle Root: ${(JSON.parse(output) as Proof).merkleRoot}`,
+				run('merkle-root', [threeEvents, '--tree-version=1']).output.split('\n')[0],
+			);
+			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
+		});
+
 		it('refuses a salt key file for the tree of version 1', () => {
 			assert.deepStrictEqual(
 				run('get-proof', [
