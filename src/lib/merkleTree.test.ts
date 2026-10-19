@@ -284,8 +284,16 @@ describe('verifyMerkleProof of version 3', () => {
 		['an event ID beyond the last event', { ...proof, eventId: '3' }],
 		['a last event ID before its own', { ...proof, lastEventId: '1' }],
 		['a last event ID after its own', { ...proof, lastEventId: '3' }],
-		// The size of the tree is one more than the ID of its last event.
-		['a tree larger than 8 bytes can count', { ...proof, lastEventId: String(2n ** 64n - 1n) }],
+		// The size of the tree is one more than the ID of its last event, and a path
+		// of 64 siblings leads to the top of a tree of 2^64 leaves.
+		[
+			'a tree larger than 8 bytes can count',
+			{
+				...proof,
+				lastEventId: String(2n ** 64n - 1n),
+				siblingHashes: Array.from({ length: 64 }, () => firstSibling),
+			},
+		],
 		['another event hash', { ...proof, eventHash: thirdHash }],
 		['another salt', { ...proof, salt: getSalt(thirdHash).toString('hex') }],
 		['no salt', { ...proof, salt: undefined }],

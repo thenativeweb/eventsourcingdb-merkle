@@ -409,6 +409,7 @@ describe('merkle-root', () => {
 			assert.strictEqual(exitCode, 0, output);
 		});
 	});
+
 	describe('with event IDs that do not run from 0 without gaps', () => {
 		const writeBackup = (ids: string[]): string => {
 			const filePath = join(mkdtempSync(join(tmpdir(), 'esdb-merkle-')), 'backup.json');

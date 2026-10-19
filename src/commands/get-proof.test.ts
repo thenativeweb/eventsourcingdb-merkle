@@ -463,6 +463,7 @@ describe('get-proof', () => {
 			assert.strictEqual(exitCode, 0, output);
 		});
 	});
+
 	describe('with event IDs that do not run from 0 without gaps', () => {
 		const backupWithGap = join(testDir, 'get-proof-gap.json');
 

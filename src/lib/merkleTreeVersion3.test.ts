@@ -98,10 +98,13 @@ describe('the Merkle tree of version 3', () => {
 		assert.strictEqual(calculateVersion3Root(leafHash, 1n, 5n, auditPath.slice(1)), undefined);
 	});
 
+	// A path of 64 siblings leads from the first leaf to the top of a tree of 2^64
+	// leaves, so only the size tells that there is no such tree.
 	it('calculates no root for a tree whose size does not fit into 8 bytes', () => {
 		const [leafHash] = getLeafHashes(1);
 		assert.ok(leafHash);
+		const auditPath = Array.from({ length: 64 }, () => leafHash);
 
-		assert.strictEqual(calculateVersion3Root(leafHash, 0n, 2n ** 64n, []), undefined);
+		assert.strictEqual(calculateVersion3Root(leafHash, 0n, 2n ** 64n, auditPath), undefined);
 	});
 });

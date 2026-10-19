@@ -240,11 +240,62 @@ describe('verify-proof', () => {
 			});
 		});
 
+		// The path of the second of two events leads to the root from the third of
+		// three events as well, if its sibling is taken for the root of the first
+		// two, so only the size that the root covers tells the two apart.
 		it('rejects a proof of version 3 that names another event of a tree of another size', () => {
-			assert.deepStrictEqual(run({ ...version3Proof, eventId: '1', lastEventId: '1' }), {
-				output: `✗ Merkle proof is invalid\n${describeVersion3Proof('1', '1')}`,
+			const firstLeafHash = createHash('sha256')
+				.update(Buffer.from([0x00]))
+				.update(`esdb:hash:v2:${'cd'.repeat(32)}`)
+				.digest();
+			const secondLeafHash = createHash('sha256')
+				.update(Buffer.from([0x00]))
+				.update(eventHash)
+				.digest();
+			const proofOfSecondEvent = {
+				eventId: '1',
+				eventHash,
+				siblingHashes: [firstLeafHash.toString('hex')],
+				merkleRoot: `esdb:merkle:v3:${createHash('sha256')
+					.update(Buffer.from([0x02]))
+					.update(Buffer.from([0, 0, 0, 0, 0, 0, 0, 2]))
+					.update(
+						createHash('sha256')
+							.update(Buffer.from([0x01]))
+							.update(firstLeafHash)
+							.update(secondLeafHash)
+							.digest(),
+					)
+					.digest('hex')}`,
+				lastEventId: '1',
+			};
+			const describeProofOfSecondEvent = (eventId: string, lastEventId: string): string =>
+				`Event ID: ${eventId}\nEvent Hash: ${eventHash}\nMerkle Root: ${proofOfSecondEvent.merkleRoot}\nLast Event ID: ${lastEventId}\n`;
+
+			assert.deepStrictEqual(run(proofOfSecondEvent), {
+				output: `✓ Merkle proof is valid\n${describeProofOfSecondEvent('1', '1')}`,
+				exitCode: 0,
+			});
+			assert.deepStrictEqual(run({ ...proofOfSecondEvent, eventId: '2', lastEventId: '2' }), {
+				output: `✗ Merkle proof is invalid\n${describeProofOfSecondEvent('2', '2')}`,
 				exitCode: 1,
 			});
+		});
+
+		it('rejects a proof of version 3 of a tree larger than 8 bytes can count', () => {
+			const lastEventId = String(2n ** 64n - 1n);
+
+			assert.deepStrictEqual(
+				run({
+					...version3Proof,
+					siblingHashes: Array.from({ length: 64 }, () => 'ab'.repeat(32)),
+					lastEventId,
+				}),
+				{
+					output: `✗ Merkle proof is invalid\n${describeVersion3Proof('0', lastEventId)}`,
+					exitCode: 1,
+				},
+			);
 		});
 
 		it('rejects a proof of version 3 with an event beyond the last event ID', () => {
