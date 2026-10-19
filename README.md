@@ -20,9 +20,22 @@ Or use it directly with `npx` without installing:
 npx eventsourcingdb-merkle [COMMAND]
 ```
 
+### Choosing the Source
+
+Every command that reads events reads them either from a backup file, which you name with `--backup`, or from a running EventSourcingDB, which you name with `--esdb-url` and its API token with `--esdb-api-token`:
+
+```shell
+eventsourcingdb-merkle validate-chain --backup=backup.json
+eventsourcingdb-merkle validate-chain --esdb-url=http://localhost:3000 --esdb-api-token="$ESDB_API_TOKEN"
+```
+
+A backup freezes the events it holds, and it can be handed on to someone who should verify it. A running database needs no backup first. Note that EventSourcingDB has no API token that only reads, so whoever reads a running database holds a token that could write as well. Passing the token from a variable, as above, keeps it out of the history of your shell.
+
+The tool reads a running database through the client SDK of EventSourcingDB, which uses the v2 API where the server offers it, from release 1.3 on. There, a read that is cut short fails rather than passing as complete. A server before release 1.3 offers only the v1 API, where the two cannot be told apart. The SDK verifies the hash of each event itself, so where one does not match, the tool names the stored hash, but not the one the SDK calculated.
+
 ### Validating Event Chains
 
-To ensure that a backup file has not been tampered with or corrupted, call the `validate-chain` command and provide the path to your backup file with `--backup`. The command verifies that each event's hash is correctly calculated, that the predecessor hash of each event matches the hash of the previous event, and that the first event has a null predecessor hash as expected:
+To ensure that a backup file has not been tampered with or corrupted, call the `validate-chain` command and name the backup file or the database, as described above. The command verifies that each event's hash is correctly calculated, that the predecessor hash of each event matches the hash of the previous event, and that the first event has a null predecessor hash as expected:
 
 ```shell
 eventsourcingdb-merkle validate-chain --backup=backup.json
@@ -57,7 +70,7 @@ Such an event cannot be verified, which is not the same as being tampered with, 
 
 ### Calculating the Merkle Root
 
-To calculate the Merkle root for all events in a backup file, call the `merkle-root` command and provide the path to your backup file with `--backup`. The Merkle root is a single hash that represents the entire event chain and can be used to verify the integrity of the backup:
+To calculate the Merkle root for all events in a backup file, call the `merkle-root` command and name the backup file or the database. The Merkle root is a single hash that represents the entire event chain and can be used to verify the integrity of the backup:
 
 ```shell
 eventsourcingdb-merkle merkle-root --backup=backup.json
@@ -73,21 +86,21 @@ Last event ID: 3
 
 #### Calculating the Merkle Root of an Earlier State
 
-A root that you published once has to be calculated again later, for instance to generate proofs against it. Since events are never changed, a newer backup holds the events of an older one, followed by those written since. Pass the last event ID that the root covered with `--last-event-id`, and the command calculates the root over the events up to it, which is the root of the older backup:
+A root that you published once has to be calculated again later, for instance to generate proofs against it. Since events are never changed, a newer backup, or the database itself, holds the events of an older backup, followed by those written since. Pass the last event ID that the root covered with `--last-event-id`, and the command calculates the root over the events up to it, which is the root of the older backup:
 
 ```shell
 eventsourcingdb-merkle merkle-root --backup=backup-2025.json --last-event-id=3
 ```
 
-So you do not have to keep the older backup to prove against its root. If the backup holds no event with that ID, the command refuses rather than calculating a root over other events.
+So you do not have to keep the older backup to prove against its root. If the backup or the database holds no event with that ID, the command refuses rather than calculating a root over other events.
 
 ### Validating Individual Events
 
 Sometimes you want to verify the integrity of a single event without processing the entire backup. The `validate-event-hash` command provides two ways to do this.
 
-#### Validating an Event from a Backup File
+#### Validating an Event from a Backup File or a Database
 
-To validate an event by its ID from a backup file, call the `validate-event-hash` command with the `--backup` and `--event-id` flags:
+To validate an event by its ID from a backup file or a database, call the `validate-event-hash` command with `--event-id` and the source:
 
 ```shell
 eventsourcingdb-merkle validate-event-hash --backup=backup.json --event-id=42
@@ -127,7 +140,7 @@ Calculated hash (version 2): esdb:hash:v2:def456...
 
 ### Generating Merkle Proofs
 
-A Merkle proof allows you to prove that a specific event is part of a backup without revealing the entire backup. To generate a proof for an event, call the `get-proof` command with the path to your backup file in `--backup` and the event ID in `--event-id`:
+A Merkle proof allows you to prove that a specific event is part of a backup without revealing the entire backup. To generate a proof for an event, call the `get-proof` command with the source and the event ID in `--event-id`:
 
 ```shell
 eventsourcingdb-merkle get-proof --backup=backup.json --event-id=42

@@ -1,7 +1,7 @@
 {
 	"name": "eventsourcingdb-merkle",
 	"version": "1.3.0",
-	"description": "Merkle tree utilities for EventSourcingDB backups.",
+	"description": "Merkle tree utilities for EventSourcingDB backups and databases.",
 	"author": {
 		"name": "the native web GmbH",
 		"email": "hello@thenativeweb.io"
