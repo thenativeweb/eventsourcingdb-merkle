@@ -136,6 +136,15 @@ describe('validate-chain', () => {
 		);
 	});
 
+	it('validates the chain of a backup whose data holds braces inside strings, or escaped characters', () => {
+		const output = execSync(
+			'node ./dist/index.js validate-chain test-fixtures/backup-with-tricky-data.ndjson',
+			{ encoding: 'utf-8' },
+		);
+		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+		assert.match(output, /✓ Chain is valid \(3 events\)/);
+	});
+
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {

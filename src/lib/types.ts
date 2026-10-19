@@ -17,12 +17,12 @@ export interface BackupEntry {
 	payload: {
 		event: CloudEvent;
 		hash: string;
-		// The original JSON string of the event data as it appears in the
-		// backup file. This is needed because the backup may contain Unicode
-		// escape sequences (e.g., \u003e for >) that are not preserved by
-		// JSON.parse() + JSON.stringify(). To verify hashes correctly, we must
-		// use the exact original string representation. Only present when
-		// reading from a backup file, not when creating events manually.
+		// The data of the event exactly as it appears in the text it was read
+		// from, which the hash covers. JSON.parse() followed by JSON.stringify()
+		// does not give it back: escape sequences such as \u003e for >, the
+		// notation of numbers, and integers beyond 2^53 change. Only present
+		// where the event was read from text, not where it was created as an
+		// object.
 		originalDataString?: string;
 	};
 }

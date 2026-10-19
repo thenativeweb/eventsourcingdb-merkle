@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
+import { getCompactValue } from './rawJson.js';
 import type { BackupEntry, CloudEvent } from './types.js';
 
 export const readBackupFile = async (filePath: string): Promise<BackupEntry[]> => {
@@ -92,44 +93,7 @@ const readEventLine = (line: string, payload: unknown, lineNumber: number): Back
 		payload: { event: event as CloudEvent, hash },
 	};
 
-	// Extract the original data JSON string to preserve Unicode escapes.
-	// We manually parse the data field to handle nested objects and
-	// escaped characters correctly.
-	if (line.includes('"data":')) {
-		const dataStart = line.indexOf('"data":') + 7;
-		let braceCount = 0;
-		let dataEnd = dataStart;
-		let foundStart = false;
-
-		for (let i = dataStart; i < line.length; i++) {
-			if (line[i] === '{' && !foundStart) {
-				foundStart = true;
-				braceCount = 1;
-				dataEnd = i + 1;
-				continue;
-			}
-
-			if (foundStart) {
-				if (line[i] === '\\') {
-					i++; // Skip escaped characters
-					dataEnd = i + 1;
-					continue;
-				}
-				if (line[i] === '{') braceCount++;
-				if (line[i] === '}') {
-					braceCount--;
-					if (braceCount === 0) {
-						dataEnd = i + 1;
-						break;
-					}
-				}
-				dataEnd = i + 1;
-			}
-		}
-
-		const startPos = dataStart + line.substring(dataStart).indexOf('{');
-		entry.payload.originalDataString = line.substring(startPos, dataEnd);
-	}
+	entry.payload.originalDataString = getCompactValue(line, ['payload', 'event', 'data']);
 
 	return entry;
 };
