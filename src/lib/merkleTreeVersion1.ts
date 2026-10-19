@@ -67,10 +67,9 @@ export const generateVersion1Proof = (
 
 			if (i === currentIndex || i + 1 === currentIndex) {
 				if (currentIndex % 2 === 0) {
-					// Target is on the left
-					if (i + 1 < currentLevel.length) {
-						siblingHashes.push({ hash: right, position: 'right' });
-					}
+					// Target is on the left. Where it has no partner, the tree pairs it
+					// with itself, so that it is its own sibling on the right.
+					siblingHashes.push({ hash: right, position: 'right' });
 				} else {
 					// Target is on the right
 					siblingHashes.push({ hash: left, position: 'left' });

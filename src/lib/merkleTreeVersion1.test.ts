@@ -1,4 +1,5 @@
 import assert from 'node:assert';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 import {
 	buildVersion1Root,
@@ -94,6 +95,22 @@ describe('generateVersion1Proof', () => {
 		assert.strictEqual(proof.eventHash, 'hash3');
 		assert.strictEqual(proof.siblingHashes.length, 2);
 	});
+
+	// The tree pairs the last of three hashes with itself, and the pair of the
+	// first two with that pair.
+	it('names an element without a partner on its level as its own sibling on the right', () => {
+		const pair = (left: string, right: string): string =>
+			createHash('sha256').update(`${left}${right}`).digest('hex');
+
+		assert.deepStrictEqual(generateVersion1Proof(['hash1', 'hash2', 'hash3'], 'hash3'), {
+			eventHash: 'hash3',
+			siblingHashes: [
+				{ hash: 'hash3', position: 'right' },
+				{ hash: pair('hash1', 'hash2'), position: 'left' },
+			],
+			merkleRoot: pair(pair('hash1', 'hash2'), pair('hash3', 'hash3')),
+		});
+	});
 });
 
 describe('verifyVersion1Proof', () => {
@@ -116,6 +133,22 @@ describe('verifyVersion1Proof', () => {
 		const proof = generateVersion1Proof(hashes, 'hash3');
 
 		assert.strictEqual(verifyVersion1Proof(proof), true);
+	});
+
+	// The trees of every size up to beyond a few powers of two, so that elements
+	// without a partner on one level or on several are on the paths.
+	it('verifies the proof of every element of a tree of any size', () => {
+		for (let count = 1; count <= 33; count++) {
+			const hashes = Array.from({ length: count }, (_, index) => `hash${index}`);
+
+			for (const hash of hashes) {
+				assert.strictEqual(
+					verifyVersion1Proof(generateVersion1Proof(hashes, hash)),
+					true,
+					`${hash} of ${count}`,
+				);
+			}
+		}
 	});
 
 	it('rejects invalid proof with wrong root', () => {
