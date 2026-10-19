@@ -126,7 +126,7 @@ describe('validate-event-hash', () => {
 			(error: Error & { stdout?: string }) => {
 				const output = error.stdout || '';
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-				assert.match(output, /✗ --event-id is required when using --backup/);
+				assert.match(output, /✗ --event-id is required when using --backup or --esdb-url/);
 				return true;
 			},
 		);
@@ -141,8 +141,12 @@ describe('validate-event-hash', () => {
 			},
 			(error: Error & { stdout?: string }) => {
 				const output = error.stdout || '';
-				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-				assert.match(output, /✗ Either --backup with --event-id, or --event must be provided/);
+				assert.ok(
+					output.includes(
+						'✗ Either --backup or --esdb-url with --event-id, or --event must be provided',
+					),
+					output,
+				);
 				return true;
 			},
 		);
@@ -300,6 +304,24 @@ describe('validate-event-hash', () => {
 				);
 			});
 		}
+
+		it('reports a hash that does not match with the hash it calculated', () => {
+			const [line = ''] = readEventsLines;
+			const changedLine = line.replace('"title":"2001', '"title":"2010');
+			assert.notStrictEqual(changedLine, line);
+			const { hash } = (JSON.parse(line) as { payload: { hash: string } }).payload;
+
+			const { output, exitCode } = runWithEvent(changedLine);
+
+			assert.strictEqual(exitCode, 1);
+			const [headline, eventId, stored, calculated, rest] = output.split('\n');
+			assert.deepStrictEqual(
+				[headline, eventId, stored, rest],
+				['✗ Hash mismatch', 'Event ID: 0', `Stored hash:     ${hash}`, ''],
+			);
+			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+			assert.match(calculated ?? '', /^Calculated hash: [0-9a-f]{64}$/u);
+		});
 
 		it('reports a hash of a version it does not know as unsupported', () => {
 			const [line] = readEventsLines.slice(-1);

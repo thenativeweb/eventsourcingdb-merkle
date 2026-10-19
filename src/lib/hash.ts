@@ -49,6 +49,19 @@ const calculateEventHashOfVersion2 = (event: CloudEvent, dataString: string): st
 	return `${hashVersion2Prefix}${getSha256(input)}`;
 };
 
+// assertKnownHashVersion refuses a stored hash whose prefix names a version
+// that the tool does not know, the way EventSourcingDB tells them apart: a hash
+// without the prefix is of version 1, and every other hash with it of a version
+// it does not know.
+export const assertKnownHashVersion = (storedHash: string): void => {
+	if (!storedHash.startsWith(hashPrefix) || storedHash.startsWith(hashVersion2Prefix)) {
+		return;
+	}
+
+	const [version = ''] = storedHash.slice(hashPrefix.length).split(':');
+	throw new UnsupportedHashVersionError(version);
+};
+
 // calculateEventHash computes the hash of an event in the version that its
 // stored hash names, since an event keeps the version of the hash it was
 // written with. An event without a stored hash names no version, which is what
@@ -61,17 +74,12 @@ export const calculateEventHash = (
 	originalDataString: string | undefined,
 	storedHash: string,
 ): string => {
+	assertKnownHashVersion(storedHash);
 	const dataString = originalDataString ?? JSON.stringify(event.data);
 
-	if (!storedHash.startsWith(hashPrefix)) {
-		return calculateEventHashOfVersion1(event, dataString);
-	}
-	if (storedHash.startsWith(hashVersion2Prefix)) {
-		return calculateEventHashOfVersion2(event, dataString);
-	}
-
-	const [version = ''] = storedHash.slice(hashPrefix.length).split(':');
-	throw new UnsupportedHashVersionError(version);
+	return storedHash.startsWith(hashVersion2Prefix)
+		? calculateEventHashOfVersion2(event, dataString)
+		: calculateEventHashOfVersion1(event, dataString);
 };
 
 // calculateEventHashInEveryVersion computes the hash of an event in every

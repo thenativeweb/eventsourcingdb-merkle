@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { findEventById, readBackupFile } from './backupReader.js';
+import { readBackupFile } from './backupReader.js';
 
 // A backup that EventSourcingDB 1.2.0 wrote for a store with a registered
 // schema, which it writes as a line of its own before the events.
@@ -61,23 +61,6 @@ describe('readBackupFile', () => {
 		// biome-ignore lint/security/noSecrets: This is a SHA256 hash for testing
 		const expectedHash = 'a5137d458a5639ee5d1f1248559058b2dfc25c98c8731aefc3efbf9decb5dbeb';
 		assert.strictEqual(firstEntry.payload.hash, expectedHash);
-	});
-});
-
-describe('findEventById', () => {
-	it('finds an event by its ID', async () => {
-		const entries = await readBackupFile('test-fixtures/test-backup.json');
-		const event = findEventById(entries, '2');
-
-		assert.ok(event);
-		assert.strictEqual(event.payload.event.id, '2');
-	});
-
-	it('returns undefined for non-existent ID', async () => {
-		const entries = await readBackupFile('test-fixtures/test-backup.json');
-		const event = findEventById(entries, '999');
-
-		assert.strictEqual(event, undefined);
 	});
 });
 
