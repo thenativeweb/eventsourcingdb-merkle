@@ -105,7 +105,7 @@ describe('verify-proof', () => {
 		}
 	});
 
-	describe('in either version of the tree', () => {
+	describe('in every version of the tree', () => {
 		const run = (proofToVerify: unknown): { output: string; exitCode: number } => {
 			try {
 				return {
@@ -187,10 +187,101 @@ describe('verify-proof', () => {
 		});
 
 		it('refuses a root of a version of the tree that it does not know', () => {
-			assert.deepStrictEqual(run({ ...proof, merkleRoot: 'esdb:merkle:v3:abc' }), {
-				output: '✗ Failed to verify Merkle proof: Unsupported Merkle tree version: v3\n',
+			assert.deepStrictEqual(run({ ...proof, merkleRoot: 'esdb:merkle:v4:abc' }), {
+				output: '✗ Failed to verify Merkle proof: Unsupported Merkle tree version: v4\n',
 				exitCode: 1,
 			});
 		});
+
+		it('refuses a last event ID in a proof of version 2', () => {
+			assert.deepStrictEqual(run({ ...proof, lastEventId: '0' }), {
+				output:
+					'✗ Invalid proof structure\nA proof of Merkle tree version 2 has no last event ID\n',
+				exitCode: 1,
+			});
+		});
+
+		it('refuses a last event ID in a proof of version 1', () => {
+			const { salt: _, ...unsalted } = proof;
+
+			assert.deepStrictEqual(run({ ...unsalted, merkleRoot: 'abc123', lastEventId: '0' }), {
+				output:
+					'✗ Invalid proof structure\nA proof of Merkle tree version 1 has no last event ID\n',
+				exitCode: 1,
+			});
+		});
+
+		// A proof of version 3 over a tree of a single, salted leaf, whose root is
+		// the hash of the size of the tree, as 8 bytes, and that leaf.
+		const leafHash = createHash('sha256')
+			.update(Buffer.from([0x00]))
+			.update(Buffer.from(salt, 'hex'))
+			.update(eventHash)
+			.digest();
+		const version3Proof = {
+			eventId: '0',
+			eventHash,
+			salt,
+			siblingHashes: [],
+			merkleRoot: `esdb:merkle:v3:${createHash('sha256')
+				.update(Buffer.from([0x02]))
+				.update(Buffer.from([0, 0, 0, 0, 0, 0, 0, 1]))
+				.update(leafHash)
+				.digest('hex')}`,
+			lastEventId: '0',
+		};
+		const describeVersion3Proof = (eventId: string, lastEventId: string): string =>
+			`Event ID: ${eventId}\nEvent Hash: ${eventHash}\nMerkle Root: ${version3Proof.merkleRoot}\nLast Event ID: ${lastEventId}\n`;
+
+		it('verifies a proof of version 3, showing the ID of the last event', () => {
+			assert.deepStrictEqual(run(version3Proof), {
+				output: `✓ Merkle proof is valid\n${describeVersion3Proof('0', '0')}`,
+				exitCode: 0,
+			});
+		});
+
+		it('rejects a proof of version 3 that names another event of a tree of another size', () => {
+			assert.deepStrictEqual(run({ ...version3Proof, eventId: '1', lastEventId: '1' }), {
+				output: `✗ Merkle proof is invalid\n${describeVersion3Proof('1', '1')}`,
+				exitCode: 1,
+			});
+		});
+
+		it('rejects a proof of version 3 with an event beyond the last event ID', () => {
+			assert.deepStrictEqual(run({ ...version3Proof, eventId: '1' }), {
+				output: `✗ Merkle proof is invalid\n${describeVersion3Proof('1', '0')}`,
+				exitCode: 1,
+			});
+		});
+
+		for (const [name, tampered, problem] of [
+			[
+				'without a last event ID',
+				{ ...version3Proof, lastEventId: undefined },
+				'A proof of Merkle tree version 3 has to contain eventId and lastEventId',
+			],
+			[
+				'with an event ID with a leading zero',
+				{ ...version3Proof, eventId: '00' },
+				'The event ID has to be digits alone, without a sign or leading zeros',
+			],
+			[
+				'with a last event ID with a sign',
+				{ ...version3Proof, lastEventId: '+0' },
+				'The last event ID has to be digits alone, without a sign or leading zeros',
+			],
+			[
+				'with a sibling with a side',
+				{ ...version3Proof, siblingHashes: [{ hash: 'ab'.repeat(32), position: 'left' }] },
+				'Every sibling has to be a hash of 64 hexadecimal digits',
+			],
+		] as const) {
+			it(`refuses a proof of version 3 ${name}`, () => {
+				assert.deepStrictEqual(run(tampered), {
+					output: `✗ Invalid proof structure\n${problem}\n`,
+					exitCode: 1,
+				});
+			});
+		}
 	});
 });

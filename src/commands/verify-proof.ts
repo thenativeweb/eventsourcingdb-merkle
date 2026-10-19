@@ -7,6 +7,7 @@ export default class VerifyProof extends BaseCommand {
 	static override description = 'Verify a Merkle proof';
 
 	static override examples = [
+		'<%= config.bin %> <%= command.id %> \'{"eventId":"42","eventHash":"...","siblingHashes":["..."],"merkleRoot":"esdb:merkle:v3:...","lastEventId":"99"}\'',
 		'<%= config.bin %> <%= command.id %> \'{"eventId":"42","eventHash":"...","siblingHashes":[],"merkleRoot":"..."}\'',
 		'<%= config.bin %> <%= command.id %> proof.json',
 	];
@@ -44,19 +45,20 @@ export default class VerifyProof extends BaseCommand {
 
 			const isValid = verifyMerkleProof(proof);
 
-			if (!isValid) {
-				this.log(`✗ Merkle proof is invalid`);
-				this.log(`Event ID: ${proof.eventId}`);
-				this.log(`Event Hash: ${proof.eventHash}`);
-				this.log(`Merkle Root: ${proof.merkleRoot}`);
-				process.exitCode = 1;
-				return;
-			}
-
-			this.log(`✓ Merkle proof is valid`);
+			this.log(isValid ? '✓ Merkle proof is valid' : '✗ Merkle proof is invalid');
 			this.log(`Event ID: ${proof.eventId}`);
 			this.log(`Event Hash: ${proof.eventHash}`);
 			this.log(`Merkle Root: ${proof.merkleRoot}`);
+
+			// The root of version 3 covers the size of its tree, so the ID of the last
+			// event tells which state of the store it is the root of.
+			if ('lastEventId' in proof) {
+				this.log(`Last Event ID: ${proof.lastEventId}`);
+			}
+
+			if (!isValid) {
+				process.exitCode = 1;
+			}
 		} catch (error) {
 			this.log(
 				`✗ Failed to verify Merkle proof: ${error instanceof Error ? error.message : String(error)}`,

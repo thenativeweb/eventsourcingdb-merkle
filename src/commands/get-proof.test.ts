@@ -140,9 +140,10 @@ describe('get-proof', () => {
 				'--json',
 			]);
 			assert.strictEqual(exitCode, 0, output);
-			const proof = JSON.parse(output) as { merkleRoot: string };
+			const proof = JSON.parse(output) as { merkleRoot: string; lastEventId: string };
 
 			assert.strictEqual(`Merkle Root: ${proof.merkleRoot}`, root);
+			assert.strictEqual(proof.lastEventId, '1');
 			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
 		});
 
@@ -200,7 +201,7 @@ describe('get-proof', () => {
 		});
 	});
 
-	describe('in either version of the tree', () => {
+	describe('in every version of the tree', () => {
 		const backup = '--backup=test-fixtures/backup-with-both-hash-versions.ndjson';
 		const keyDigits = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 		const keyFile = join(mkdtempSync(join(tmpdir(), 'esdb-merkle-')), 'merkle.key');
@@ -220,12 +221,15 @@ describe('get-proof', () => {
 			}
 		};
 
+		// A proof of version 3 has siblings without sides and the ID of the last
+		// event, a proof of version 1 or 2 siblings with sides.
 		interface Proof {
 			eventId: string;
 			eventHash: string;
 			salt?: string;
-			siblingHashes: { hash: string; position: string }[];
+			siblingHashes: (string | { hash: string; position: string })[];
 			merkleRoot: string;
+			lastEventId?: string;
 		}
 
 		const formatProof = (proof: Proof): string =>
@@ -235,10 +239,13 @@ describe('get-proof', () => {
 				`Event Hash: ${proof.eventHash}`,
 				...(proof.salt === undefined ? [] : [`Salt: ${proof.salt}`]),
 				`Merkle Root: ${proof.merkleRoot}`,
+				...(proof.lastEventId === undefined ? [] : [`Last Event ID: ${proof.lastEventId}`]),
 				'',
 				`Sibling Hashes (${proof.siblingHashes.length}):`,
-				...proof.siblingHashes.map(
-					({ hash, position }, index) => `  ${index + 1}. ${hash} (${position})`,
+				...proof.siblingHashes.map((sibling, index) =>
+					typeof sibling === 'string'
+						? `  ${index + 1}. ${sibling}`
+						: `  ${index + 1}. ${sibling.hash} (${sibling.position})`,
 				),
 				'',
 			].join('\n');
@@ -267,12 +274,42 @@ describe('get-proof', () => {
 				'salt',
 				'siblingHashes',
 				'merkleRoot',
+				'lastEventId',
 			]);
 			assert.strictEqual(
 				proof.salt,
 				createHmac('sha256', Buffer.from(keyDigits, 'hex')).update(proof.eventHash).digest('hex'),
 			);
+			assert.ok(proof.siblingHashes.every(sibling => typeof sibling === 'string'));
+			assert.strictEqual(proof.lastEventId, '3');
 			assert.strictEqual(`Merkle Root: ${proof.merkleRoot}`, root);
+			assert.deepStrictEqual(run('verify-proof', [output]), {
+				output: `✓ Merkle proof is valid\nEvent ID: 2\nEvent Hash: ${proof.eventHash}\nMerkle Root: ${proof.merkleRoot}\nLast Event ID: 3\n`,
+				exitCode: 0,
+			});
+		});
+
+		it('proves an event against the root of version 2 as release 3.0 did', () => {
+			const salted = [backup, '--tree-version=2', `--salt-key-file=${keyFile}`, '--event-id=2'];
+			const root = run('merkle-root', [
+				backup,
+				'--tree-version=2',
+				`--salt-key-file=${keyFile}`,
+			]).output.split('\n')[0];
+			const { output, exitCode } = run('get-proof', [...salted, '--json']);
+			assert.strictEqual(exitCode, 0, output);
+			const proof = JSON.parse(output) as Proof;
+
+			assert.deepStrictEqual(Object.keys(proof), [
+				'eventId',
+				'eventHash',
+				'salt',
+				'siblingHashes',
+				'merkleRoot',
+			]);
+			assert.ok(proof.siblingHashes.every(sibling => typeof sibling !== 'string'));
+			assert.strictEqual(`Merkle Root: ${proof.merkleRoot}`, root);
+			assert.deepStrictEqual(run('get-proof', salted), { output: formatProof(proof), exitCode: 0 });
 			assert.deepStrictEqual(run('verify-proof', [output]), {
 				output: `✓ Merkle proof is valid\nEvent ID: 2\nEvent Hash: ${proof.eventHash}\nMerkle Root: ${proof.merkleRoot}\n`,
 				exitCode: 0,
@@ -356,7 +393,7 @@ describe('get-proof', () => {
 			);
 			assert.ok(
 				output.includes(
-					'Version of the Merkle tree: 1 to prove against roots that releases before 3.0 calculated',
+					'Version of the Merkle tree: 1 to prove against roots that releases before 3.0 calculated, 2 to prove against roots that release 3.0 calculated',
 				),
 				output,
 			);
@@ -404,18 +441,89 @@ describe('get-proof', () => {
 			}
 		};
 
-		it('refuses it in the tree of version 2, naming the event', () => {
-			assert.deepStrictEqual(runCommand([`--backup=${brokenBackup}`, '--event-id=0']), {
-				output: '✗ Failed to generate Merkle proof: event 0 has no hash of version 1 or 2\n',
-				exitCode: 1,
+		for (const treeVersion of ['2', '3']) {
+			it(`refuses it in the tree of version ${treeVersion}, naming the event`, () => {
+				assert.deepStrictEqual(
+					runCommand([`--backup=${brokenBackup}`, '--event-id=0', `--tree-version=${treeVersion}`]),
+					{
+						output: '✗ Failed to generate Merkle proof: event 0 has no hash of version 1 or 2\n',
+						exitCode: 1,
+					},
+				);
 			});
-		});
+		}
 
 		it('takes it in the tree of version 1, as releases before 3.0 did', () => {
 			const { output, exitCode } = runCommand([
 				`--backup=${brokenBackup}`,
 				'--event-id=0',
 				'--tree-version=1',
+			]);
+
+			assert.strictEqual(exitCode, 0, output);
+		});
+	});
+	describe('with event IDs that do not run from 0 without gaps', () => {
+		const backupWithGap = join(testDir, 'get-proof-gap.json');
+
+		before(() => {
+			mkdirSync(testDir, { recursive: true });
+			writeFileSync(
+				backupWithGap,
+				[
+					{ id: '0', hash: firstHash, predecessorhash: '0'.repeat(64) },
+					{ id: '2', hash: secondHash, predecessorhash: firstHash },
+				]
+					.map(({ id, hash, predecessorhash }) =>
+						JSON.stringify({
+							type: 'event',
+							payload: {
+								event: {
+									specversion: '1.0',
+									id,
+									time: '2024-01-01T00:00:00Z',
+									source: 'test',
+									subject: '/test',
+									type: 'test.event',
+									datacontenttype: 'application/json',
+									predecessorhash,
+									data: {},
+								},
+								hash,
+							},
+						}),
+					)
+					.join('\n'),
+			);
+		});
+
+		const runCommand = (args: string[]): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync('node', ['./dist/index.js', 'get-proof', ...args], {
+						encoding: 'utf-8',
+					}),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		it('refuses them in the tree of version 3, naming the event', () => {
+			assert.deepStrictEqual(runCommand([`--backup=${backupWithGap}`, '--event-id=0']), {
+				output:
+					'✗ Failed to generate Merkle proof: event 2 is at position 1 of the source, but the IDs of the events have to run from 0 without gaps\n',
+				exitCode: 1,
+			});
+		});
+
+		it('takes them in the tree of version 2, as release 3.0 did', () => {
+			const { output, exitCode } = runCommand([
+				`--backup=${backupWithGap}`,
+				'--event-id=2',
+				'--tree-version=2',
 			]);
 
 			assert.strictEqual(exitCode, 0, output);

@@ -79,10 +79,12 @@ eventsourcingdb-merkle merkle-root --backup=backup.json
 The command outputs the Merkle root, the total number of events, and the ID of the last event it covers:
 
 ```
-Merkle Root: esdb:merkle:v2:d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
+Merkle Root: esdb:merkle:v3:6a0e4b2f9d1c...
 Total events: 4
 Last event ID: 3
 ```
+
+The root covers the number of events as well, so that a proof against it can name the position of its event, as described under [Verifying Merkle Proofs](#verifying-merkle-proofs).
 
 #### Calculating the Merkle Root of an Earlier State
 
@@ -107,12 +109,12 @@ eventsourcingdb-merkle merkle-root --backup=backup.json --salt-key-file=merkle.k
 
 The key file holds 64 hexadecimal digits. `generate-salt-key` never overwrites a file, and it lets nobody write the key, and on Linux and macOS, only the owner of the file read it. Windows knows only whether a file is read-only, so there, who can read the key follows from the permissions of its folder. Keep the key as long as the root, and as safely as a password: a root calculated with it is calculated again with that key only, so without it, no further proof can be generated for the root, and whoever has it can calculate the salt of every leaf. A proof carries the salt of its own leaf, so verifying it needs no key.
 
-#### Calculating a Root of Version 1
+#### Calculating a Root of an Earlier Version
 
-Releases before 3.0 built the tree in another way, which is version 1 of the tree: it hashes leaves and inner nodes alike, and pairs the last node of a level with itself where it has no partner, so that a list of hashes has the same root as the same list with its last hash twice. A root of version 2 starts with `esdb:merkle:v2:`, a root of version 1 has no prefix. To calculate a root of version 1 again, or to prove an event against one, pass `--tree-version=1`. Version 1 knows no salts:
+Releases before 4.0 built the tree in other ways. Release 3.0 built version 2 of the tree, which has the leaves and inner nodes of version 3, but a root that does not cover the number of events, and proofs that follow the sides of their siblings, so that they do not bind the ID of their event. Releases before 3.0 built version 1, which hashes leaves and inner nodes alike, and pairs the last node of a level with itself where it has no partner, so that a list of hashes has the same root as the same list with its last hash twice. A root of version 3 starts with `esdb:merkle:v3:`, a root of version 2 with `esdb:merkle:v2:`, and a root of version 1 has no prefix. To calculate a root of an earlier version again, or to prove an event against one, pass `--tree-version=1` or `--tree-version=2`. Version 1 knows no salts:
 
 ```shell
-eventsourcingdb-merkle merkle-root --backup=backup.json --tree-version=1
+eventsourcingdb-merkle merkle-root --backup=backup.json --tree-version=2
 ```
 
 ### Validating Individual Events
@@ -181,13 +183,16 @@ The command outputs the proof in a human-readable format:
 Merkle Proof for Event 42
 
 Event Hash: esdb:hash:v2:abc123...
-Merkle Root: esdb:merkle:v2:d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
+Merkle Root: esdb:merkle:v3:6a0e4b2f9d1c...
+Last Event ID: 99
 
 Sibling Hashes (3):
-  1. def456... (left)
-  2. ghi789... (right)
-  3. jkl012... (left)
+  1. def456...
+  2. ghi789...
+  3. jkl012...
 ```
+
+A proof of version 3 names the ID of the last event that its root covers, which fixes the position of its event in the tree. A proof of version 1 or 2 names no last event ID, but the side of each sibling instead, such as `def456... (left)`.
 
 To prove an event against the root of an earlier state, pass its last event ID with `--last-event-id`, as for `merkle-root`. An event after it is not part of that tree, so the command refuses to prove it:
 
@@ -195,7 +200,7 @@ To prove an event against the root of an earlier state, pass its last event ID w
 eventsourcingdb-merkle get-proof --backup=backup.json --event-id=42 --last-event-id=1234566
 ```
 
-To prove an event against a root whose leaves are salted, pass the same key with `--salt-key-file`, and to prove it against a root of version 1, pass `--tree-version=1`, as for `merkle-root`. A proof against a salted root carries the salt of the leaf of its event, right after the hash of the event:
+To prove an event against a root whose leaves are salted, pass the same key with `--salt-key-file`, and to prove it against a root of an earlier version, pass `--tree-version`, as for `merkle-root`. A proof against a salted root carries the salt of the leaf of its event, right after the hash of the event:
 
 ```shell
 eventsourcingdb-merkle get-proof --backup=backup.json --event-id=42 --salt-key-file=merkle.key
@@ -206,7 +211,8 @@ Merkle Proof for Event 42
 
 Event Hash: esdb:hash:v2:abc123...
 Salt: 9c1f0b...
-Merkle Root: esdb:merkle:v2:5f0c3e...
+Merkle Root: esdb:merkle:v3:5f0c3e...
+Last Event ID: 99
 ```
 
 #### Outputting JSON
@@ -224,24 +230,16 @@ The output can then be saved to a file and shared with others:
   "eventId": "42",
   "eventHash": "esdb:hash:v2:abc123...",
   "siblingHashes": [
-    {
-      "hash": "def456...",
-      "position": "left"
-    },
-    {
-      "hash": "ghi789...",
-      "position": "right"
-    },
-    {
-      "hash": "jkl012...",
-      "position": "left"
-    }
+    "def456...",
+    "ghi789...",
+    "jkl012..."
   ],
-  "merkleRoot": "esdb:merkle:v2:d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab"
+  "merkleRoot": "esdb:merkle:v3:6a0e4b2f9d1c...",
+  "lastEventId": "99"
 }
 ```
 
-A proof against a salted root holds its salt in `salt`, right after `eventHash`.
+A proof against a salted root holds its salt in `salt`, right after `eventHash`. A proof of version 1 or 2 holds no `lastEventId`, and every sibling in it is an object with its `hash` and its `position`, `left` or `right`.
 
 ### Verifying Merkle Proofs
 
@@ -256,10 +254,10 @@ eventsourcingdb-merkle verify-proof proof.json
 Or with a JSON string:
 
 ```shell
-eventsourcingdb-merkle verify-proof '{"eventId":"42","eventHash":"...","siblingHashes":[],"merkleRoot":"..."}'
+eventsourcingdb-merkle verify-proof '{"eventId":"42","eventHash":"...","siblingHashes":["..."],"merkleRoot":"esdb:merkle:v3:...","lastEventId":"99"}'
 ```
 
-The command verifies proofs of either version of the tree, which it tells apart by their root, and takes the salt of a salted proof from the proof itself, so it needs neither the backup nor the key.
+The command verifies proofs of every version of the tree, which it tells apart by their root, and takes the salt of a salted proof from the proof itself, so it needs neither the backup nor the key.
 
 If the proof is valid, the command confirms this and displays the event details:
 
@@ -267,7 +265,8 @@ If the proof is valid, the command confirms this and displays the event details:
 ✓ Merkle proof is valid
 Event ID: 42
 Event Hash: esdb:hash:v2:abc123...
-Merkle Root: esdb:merkle:v2:d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
+Merkle Root: esdb:merkle:v3:6a0e4b2f9d1c...
+Last Event ID: 99
 ```
 
 If the proof is invalid, the command indicates this with a non-zero exit code:
@@ -276,8 +275,11 @@ If the proof is invalid, the command indicates this with a non-zero exit code:
 ✗ Merkle proof is invalid
 Event ID: 42
 Event Hash: esdb:hash:v2:abc123...
-Merkle Root: esdb:merkle:v2:d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
+Merkle Root: esdb:merkle:v3:6a0e4b2f9d1c...
+Last Event ID: 99
 ```
+
+A valid proof shows that the event is part of the tree with the root it names, so compare that root with the one that was published. In version 3, it also shows that the event is the one with its ID, in a tree that ends at the last event ID: its path leads to the root from the leaf at that position only, and the root covers the number of events, so neither ID can be changed without the proof becoming invalid. A proof of version 1 or 2 does not bind the ID of its event, so whoever hands it on could change it, and its ID is only as trustworthy as whoever gave you the proof.
 
 ## Understanding the Technical Details
 
@@ -288,11 +290,14 @@ The tool implements Merkle trees using SHA-256 hashing, following the EventSourc
 
 In both versions, the data is hashed as it appears in the backup or in the event given with `--event`, rather than parsed and serialized again, since that would change escape sequences such as `\u003c` for `<` and the notation of numbers. Only the whitespace between its tokens is left out, which EventSourcingDB never writes, so that an event formatted afterwards, as by a viewer or by `jq` without `-c`, still verifies.
 
-The Merkle tree of version 2 follows [RFC 6962](https://www.rfc-editor.org/rfc/rfc6962), as the tree of [eventsourcingdb-auditing](https://github.com/thenativeweb/eventsourcingdb-auditing) does:
+The Merkle trees of versions 2 and 3 follow [RFC 6962](https://www.rfc-editor.org/rfc/rfc6962), as the tree of [eventsourcingdb-auditing](https://github.com/thenativeweb/eventsourcingdb-auditing) does:
 
 - The data of a leaf is the hash of its event as it is stored, prefix included, as text in UTF-8. Where the leaves are salted, its salt comes first: the HMAC-SHA256 of that text under the salt key. Since nothing marks where the salt ends, the tree takes only hashes in the form of version 1 or 2, which give the data of a leaf other lengths with a salt than without one, and refuses an event with any other hash, as `verify-proof` refuses a proof of one.
 - The hash of a leaf is the SHA-256 of the byte `0x00` followed by its data, and the hash of an inner node is the SHA-256 of the byte `0x01` followed by the hashes of its two children, so that neither can pass for the other.
-- The tree splits its leaves at the largest power of two smaller than their number, and never duplicates a node. Its root is the hash of its top node in hexadecimal, after the prefix `esdb:merkle:v2:`.
+- The tree splits its leaves at the largest power of two smaller than their number, and never duplicates a node.
+- The root of version 2 is the hash of the top node in hexadecimal, after the prefix `esdb:merkle:v2:`. The root of version 3 is the SHA-256 of the byte `0x02`, the number of leaves as 8 bytes, big-endian, and the hash of the top node, in hexadecimal, after the prefix `esdb:merkle:v3:`.
+
+A proof of version 3 is verified as [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162), section 2.1.3.2, verifies an inclusion proof, with the event ID as the index of its leaf and one more than the last event ID as the size of the tree, from which the side of every sibling follows. EventSourcingDB numbers its events from 0 without gaps, so the leaf at an index is the event with that ID, and the tree of version 3 refuses a source whose IDs do not run like that. Certificate Transparency, for which RFC 9162 was written, signs the size of a tree together with its root. The root of version 3 hashes it in instead, since without it, a proof could bring a size of its own, under which its path would lead to the root from the leaf at another index.
 
 The tree of version 1 takes the stored hashes as its leaves, and hashes the concatenation of the hashes of its two children, as text, for an inner node. Where a level has an odd number of nodes, it pairs the last one with itself.
 

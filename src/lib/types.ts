@@ -27,15 +27,34 @@ export interface BackupEntry {
 	};
 }
 
-export interface MerkleProof {
+// A sibling of a proof of version 1 or 2, and the side of the path on which it
+// lies.
+export interface SiblingWithSide {
+	hash: string;
+	position: 'left' | 'right';
+}
+
+// A proof of version 1 or 2, whose path follows the sides of its siblings, so
+// that it does not bind the ID of its event.
+export interface MerkleProofWithSides {
 	eventId: string;
 	eventHash: string;
 	// The salt of the leaf of the event, in hexadecimal, where the leaves of the
 	// tree are salted.
 	salt?: string;
-	siblingHashes: Array<{
-		hash: string;
-		position: 'left' | 'right';
-	}>;
+	siblingHashes: SiblingWithSide[];
 	merkleRoot: string;
 }
+
+// A proof of version 3, whose path follows from the ID of its event and the ID
+// of the last event of the tree, whose size its root covers.
+export interface MerkleProofVersion3 {
+	eventId: string;
+	eventHash: string;
+	salt?: string;
+	siblingHashes: string[];
+	merkleRoot: string;
+	lastEventId: string;
+}
+
+export type MerkleProof = MerkleProofWithSides | MerkleProofVersion3;

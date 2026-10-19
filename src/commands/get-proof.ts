@@ -29,7 +29,7 @@ export default class GetProof extends BaseCommand {
 		}),
 		json: Flags.boolean({ description: 'Output proof as JSON' }),
 		...getTreeFlags(
-			'Version of the Merkle tree: 1 to prove against roots that releases before 3.0 calculated',
+			'Version of the Merkle tree: 1 to prove against roots that releases before 3.0 calculated, 2 to prove against roots that release 3.0 calculated',
 		),
 	};
 
@@ -108,11 +108,20 @@ export default class GetProof extends BaseCommand {
 				this.log(`Salt: ${proof.salt}`);
 			}
 			this.log(`Merkle Root: ${proof.merkleRoot}`);
+			if ('lastEventId' in proof) {
+				this.log(`Last Event ID: ${proof.lastEventId}`);
+			}
 			this.log('');
 			this.log(`Sibling Hashes (${proof.siblingHashes.length}):`);
 
+			// The siblings of a proof of version 3 have no sides, since they follow
+			// from the position of the event and the size of the tree.
 			for (const [index, sibling] of proof.siblingHashes.entries()) {
-				this.log(`  ${index + 1}. ${sibling.hash} (${sibling.position})`);
+				this.log(
+					typeof sibling === 'string'
+						? `  ${index + 1}. ${sibling}`
+						: `  ${index + 1}. ${sibling.hash} (${sibling.position})`,
+				);
 			}
 		} catch (error) {
 			this.log(`✗ Failed to generate Merkle proof: ${describeError(error)}`);
