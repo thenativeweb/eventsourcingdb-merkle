@@ -1,0 +1,4 @@
+{"type":"backup","data":{"formatVersion":2,"lastBackedUpEvent":{"id":"4","hash":"esdb:hash:v2:05b982339dfe48dd5dfb381e2685d74594603e800cbc95c86fcac579abb7cb16"}}}
+{"type":"eventSchema","data":{"type":"io.eventsourcingdb.library.book-acquired","schema":{"properties":{"title":{"type":"string"}},"required":["title"],"type":"object"}}}
+{"type":"lastBackedUpEvent","data":{"id":"4","hash":"esdb:hash:v2:05b982339dfe48dd5dfb381e2685d74594603e800cbc95c86fcac579abb7cb16"}}
+{"type":"end","data":{}}

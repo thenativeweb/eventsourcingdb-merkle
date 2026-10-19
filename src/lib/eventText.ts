@@ -16,9 +16,10 @@ const isEvent = (value: unknown): value is CloudEvent & { hash?: unknown } => {
 };
 
 // readEventText reads an event from text in every form one can copy it from:
-// a line of a backup, which holds the event and its hash side by side, a line
-// of read-events, which holds the event with its hash, or the event alone,
-// with its hash or without. The data is taken from the text
+// a line of a backup of the v1 API, which holds the event and its hash side by
+// side, a line of read-events of the v1 API, which holds the event with its
+// hash, a line of a backup or of read-events of the v2 API, which holds the
+// event with its hash as data, or the event alone, with its hash or without. The data is taken from the text
 // rather than from what JSON.parse makes of it, since the hash covers it as
 // EventSourcingDB wrote it. Text in any other form gives undefined, a line
 // whose payload is neither of the two included, since a line carries no spec
@@ -41,6 +42,18 @@ export const readEventText = (text: string): EventFromText | undefined => {
 				event: payload,
 				storedHash: payload.hash,
 				originalDataString: getCompactValue(text, ['payload', 'data']),
+			};
+		}
+	}
+
+	if (isObject(parsed) && parsed.type === 'event' && isEvent(parsed.data)) {
+		const { data } = parsed;
+
+		if (typeof data.hash === 'string') {
+			return {
+				event: data,
+				storedHash: data.hash,
+				originalDataString: getCompactValue(text, ['data', 'data']),
 			};
 		}
 	}
