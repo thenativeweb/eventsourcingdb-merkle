@@ -73,6 +73,21 @@ export const calculateEventHash = (
 	throw new UnsupportedHashVersionError(version);
 };
 
+// calculateEventHashInEveryVersion computes the hash of an event in every
+// version the tool knows, for an event without a stored hash that would tell
+// which version is meant.
+export const calculateEventHashInEveryVersion = (
+	event: CloudEvent,
+	originalDataString?: string,
+): { version: number; hash: string }[] => {
+	const dataString = originalDataString ?? JSON.stringify(event.data);
+
+	return [
+		{ version: 1, hash: calculateEventHashOfVersion1(event, dataString) },
+		{ version: 2, hash: calculateEventHashOfVersion2(event, dataString) },
+	];
+};
+
 export const hashPair = (left: string, right: string): string => {
 	return crypto.createHash('sha256').update(`${left}${right}`).digest('hex');
 };

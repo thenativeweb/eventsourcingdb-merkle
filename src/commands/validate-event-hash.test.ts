@@ -5,6 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
 
+const hashesInEveryVersion =
+	/^Calculated hash \(version 1\): [0-9a-f]{64}\nCalculated hash \(version 2\): esdb:hash:v2:[0-9a-f]{64}\n$/u;
+
 // formatLine adds whitespace between the tokens of a line, as a viewer or jq
 // without -c does, and keeps what is inside strings, escape sequences included.
 const formatLine = (line: string): string => {
@@ -70,7 +73,7 @@ describe('validate-event-hash', () => {
 
 	it('validates event hash from file', () => {
 		const output = execSync(
-			`node ./dist/index.js validate-event-hash --file ${testBackup} --event-id 0`,
+			`node ./dist/index.js validate-event-hash --backup ${testBackup} --event-id 0`,
 			{ encoding: 'utf-8' },
 		);
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -82,7 +85,7 @@ describe('validate-event-hash', () => {
 	it('handles non-existent event ID', () => {
 		assert.throws(
 			() => {
-				execSync(`node ./dist/index.js validate-event-hash --file ${testBackup} --event-id 999`, {
+				execSync(`node ./dist/index.js validate-event-hash --backup ${testBackup} --event-id 999`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -110,21 +113,20 @@ describe('validate-event-hash', () => {
 		const output = execSync(`node ./dist/index.js validate-event-hash --event '${event}'`, {
 			encoding: 'utf-8',
 		});
-		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-		assert.match(output, /Calculated hash:/);
+		assert.match(output, hashesInEveryVersion);
 	});
 
 	it('shows error when event-id is missing with file', () => {
 		assert.throws(
 			() => {
-				execSync(`node ./dist/index.js validate-event-hash --file ${testBackup}`, {
+				execSync(`node ./dist/index.js validate-event-hash --backup ${testBackup}`, {
 					encoding: 'utf-8',
 				});
 			},
 			(error: Error & { stdout?: string }) => {
 				const output = error.stdout || '';
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-				assert.match(output, /✗ --event-id is required when using --file/);
+				assert.match(output, /✗ --event-id is required when using --backup/);
 				return true;
 			},
 		);
@@ -140,7 +142,7 @@ describe('validate-event-hash', () => {
 			(error: Error & { stdout?: string }) => {
 				const output = error.stdout || '';
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-				assert.match(output, /✗ Either --file and --event-id, or --event must be provided/);
+				assert.match(output, /✗ Either --backup with --event-id, or --event must be provided/);
 				return true;
 			},
 		);
@@ -187,7 +189,11 @@ describe('validate-event-hash', () => {
 					['./dist/index.js', 'validate-event-hash', `--event=${eventLine}`],
 					{ encoding: 'utf-8' },
 				);
-				assert.strictEqual(output, `Calculated hash: ${hash}\n`);
+				const [version1, version2, rest] = output.split('\n');
+				assert.strictEqual(version1, `Calculated hash (version 1): ${hash}`);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(version2 ?? '', /^Calculated hash \(version 2\): esdb:hash:v2:[0-9a-f]{64}$/u);
+				assert.strictEqual(rest, '');
 			});
 		}
 	});
@@ -219,7 +225,7 @@ describe('validate-event-hash', () => {
 		it('validates the hash of an event of either version from a backup', () => {
 			for (const eventId of ['1', '3']) {
 				const output = execSync(
-					`node ./dist/index.js validate-event-hash --file test-fixtures/backup-with-both-hash-versions.ndjson --event-id ${eventId}`,
+					`node ./dist/index.js validate-event-hash --backup test-fixtures/backup-with-both-hash-versions.ndjson --event-id ${eventId}`,
 					{ encoding: 'utf-8' },
 				);
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -245,6 +251,25 @@ describe('validate-event-hash', () => {
 				assert.strictEqual(exitCode, 0, output);
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
 				assert.match(output, /✓ Hash is valid/);
+			});
+		}
+
+		for (const [index, line] of readEventsLines.entries()) {
+			it(`calculates the hash of event ${index} in both versions, one of which is its stored hash`, () => {
+				const { hash } = (JSON.parse(line) as { payload: { hash: string } }).payload;
+				const version = hash.startsWith('esdb:hash:v2:') ? 2 : 1;
+				// Cutting the hash out of the text keeps the data as the line holds it.
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				const eventText = line.slice(line.indexOf('{"source"'), -1).replace(/,"hash":"[^"]*"/u, '');
+				assert.strictEqual((JSON.parse(eventText) as { hash?: string }).hash, undefined);
+
+				const { output, exitCode } = runWithEvent(eventText);
+
+				assert.strictEqual(exitCode, 0, output);
+				assert.ok(
+					output.split('\n').includes(`Calculated hash (version ${version}): ${hash}`),
+					output,
+				);
 			});
 		}
 
@@ -283,7 +308,7 @@ describe('validate-event-hash', () => {
 
 		it('validates the hash of an event of the backup', () => {
 			const output = execSync(
-				'node ./dist/index.js validate-event-hash --file test-fixtures/backup-v2-full.ndjson --event-id 2',
+				'node ./dist/index.js validate-event-hash --backup test-fixtures/backup-v2-full.ndjson --event-id 2',
 				{ encoding: 'utf-8' },
 			);
 			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files

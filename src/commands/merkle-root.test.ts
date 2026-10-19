@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -54,7 +54,7 @@ describe('merkle-root', () => {
 	});
 
 	it('calculates and displays merkle root', () => {
-		const output = execSync(`node ./dist/index.js merkle-root ${testBackup}`, {
+		const output = execSync(`node ./dist/index.js merkle-root --backup=${testBackup}`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -66,7 +66,7 @@ describe('merkle-root', () => {
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {
-				execSync('node ./dist/index.js merkle-root /nonexistent/file.json', {
+				execSync('node ./dist/index.js merkle-root --backup=/nonexistent/file.json', {
 					encoding: 'utf-8',
 				});
 			},
@@ -81,23 +81,22 @@ describe('merkle-root', () => {
 		);
 	});
 
-	it('shows error when file argument is missing', () => {
+	it('shows error when the backup is missing', () => {
 		try {
 			execSync('node ./dist/index.js merkle-root', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');
 		} catch (error: unknown) {
-			const err = error as Error & { stdout?: string; stderr?: string };
-			const output = err.stdout || '';
-			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-			assert.match(output, /Missing 1 required arg/);
+			const err = error as Error & { stdout?: string; status?: number };
+			assert.strictEqual(err.stdout, '✗ --backup must be provided\nSee more help with --help\n');
+			assert.strictEqual(err.status, 2);
 		}
 	});
 
 	it('calculates the Merkle root of a backup of a store with a registered schema', () => {
 		const output = execSync(
-			'node ./dist/index.js merkle-root test-fixtures/backup-with-schema.ndjson',
+			'node ./dist/index.js merkle-root --backup=test-fixtures/backup-with-schema.ndjson',
 			{ encoding: 'utf-8' },
 		);
 		const [firstHash, secondHash] = readFileSync('test-fixtures/backup-with-schema.ndjson', 'utf-8')
@@ -115,7 +114,7 @@ describe('merkle-root', () => {
 
 	it('builds the Merkle tree from the hashes as they are stored, of either version', () => {
 		const output = execSync(
-			'node ./dist/index.js merkle-root test-fixtures/backup-with-both-hash-versions.ndjson',
+			'node ./dist/index.js merkle-root --backup=test-fixtures/backup-with-both-hash-versions.ndjson',
 			{ encoding: 'utf-8' },
 		);
 
@@ -131,6 +130,51 @@ describe('merkle-root', () => {
 			createHash('sha256').update(`${left}${right}`).digest('hex');
 		const expectedRoot = pair(pair(first, second), pair(third, fourth));
 
-		assert.strictEqual(output, `Merkle Root: ${expectedRoot}\nTotal events: 4\n`);
+		assert.strictEqual(output, `Merkle Root: ${expectedRoot}\nTotal events: 4\nLast event ID: 3\n`);
+	});
+
+	describe('with a last event ID', () => {
+		const run = (args: string[]): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync('node', ['./dist/index.js', 'merkle-root', ...args], {
+						encoding: 'utf-8',
+					}),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		// The older backup holds the first two events of the newer one, which
+		// EventSourcingDB wrote before it wrote the others.
+		it('calculates the root of an older backup again from a newer one', () => {
+			const older = run(['--backup=test-fixtures/backup-before-version-2.ndjson']);
+			const newer = run([
+				'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
+				'--last-event-id=1',
+			]);
+
+			assert.strictEqual(older.exitCode, 0, older.output);
+			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+			const expectedOutput = /^Merkle Root: [0-9a-f]{64}\nTotal events: 2\nLast event ID: 1\n$/u;
+			assert.match(older.output, expectedOutput);
+			assert.strictEqual(newer.output, older.output);
+		});
+
+		it('refuses a last event ID that the backup does not hold', () => {
+			const { output, exitCode } = run([
+				'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
+				'--last-event-id=9',
+			]);
+
+			assert.strictEqual(exitCode, 1);
+			assert.strictEqual(
+				output,
+				'✗ Failed to calculate Merkle root: the backup holds no event with ID 9\n',
+			);
+		});
 	});
 });

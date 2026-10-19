@@ -79,7 +79,7 @@ describe('validate-chain', () => {
 	});
 
 	it('validates a correct chain', () => {
-		const output = execSync(`node ./dist/index.js validate-chain ${validBackup}`, {
+		const output = execSync(`node ./dist/index.js validate-chain --backup=${validBackup}`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -89,7 +89,7 @@ describe('validate-chain', () => {
 	it('detects chain validation errors', () => {
 		assert.throws(
 			() => {
-				execSync(`node ./dist/index.js validate-chain ${invalidBackup}`, {
+				execSync(`node ./dist/index.js validate-chain --backup=${invalidBackup}`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -106,7 +106,7 @@ describe('validate-chain', () => {
 
 	it('validates the chain of a backup of a store with a registered schema', () => {
 		const output = execSync(
-			'node ./dist/index.js validate-chain test-fixtures/backup-with-schema.ndjson',
+			'node ./dist/index.js validate-chain --backup=test-fixtures/backup-with-schema.ndjson',
 			{ encoding: 'utf-8' },
 		);
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -122,7 +122,7 @@ describe('validate-chain', () => {
 
 		assert.throws(
 			() => {
-				execSync(`node ./dist/index.js validate-chain ${incompleteBackup}`, {
+				execSync(`node ./dist/index.js validate-chain --backup=${incompleteBackup}`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -138,7 +138,7 @@ describe('validate-chain', () => {
 
 	it('validates the chain of a backup whose data holds braces inside strings, or escaped characters', () => {
 		const output = execSync(
-			'node ./dist/index.js validate-chain test-fixtures/backup-with-tricky-data.ndjson',
+			'node ./dist/index.js validate-chain --backup=test-fixtures/backup-with-tricky-data.ndjson',
 			{ encoding: 'utf-8' },
 		);
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -147,7 +147,7 @@ describe('validate-chain', () => {
 
 	it('validates the chain of a backup that holds events of both versions of the hash', () => {
 		const output = execSync(
-			'node ./dist/index.js validate-chain test-fixtures/backup-with-both-hash-versions.ndjson',
+			'node ./dist/index.js validate-chain --backup=test-fixtures/backup-with-both-hash-versions.ndjson',
 			{ encoding: 'utf-8' },
 		);
 		assert.strictEqual(output, '✓ Chain is valid (4 events)\n');
@@ -162,7 +162,7 @@ describe('validate-chain', () => {
 				.join(''),
 		);
 
-		const output = execSync(`node ./dist/index.js validate-chain ${fullAndIncrements}`, {
+		const output = execSync(`node ./dist/index.js validate-chain --backup=${fullAndIncrements}`, {
 			encoding: 'utf-8',
 		});
 		assert.strictEqual(output, '✓ Chain is valid (5 events)\n');
@@ -171,7 +171,7 @@ describe('validate-chain', () => {
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {
-				execSync('node ./dist/index.js validate-chain /nonexistent/file.json', {
+				execSync('node ./dist/index.js validate-chain --backup=/nonexistent/file.json', {
 					encoding: 'utf-8',
 				});
 			},
@@ -186,17 +186,16 @@ describe('validate-chain', () => {
 		);
 	});
 
-	it('shows error when file argument is missing', () => {
+	it('shows error when the backup is missing', () => {
 		try {
 			execSync('node ./dist/index.js validate-chain', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');
 		} catch (error: unknown) {
-			const err = error as Error & { stdout?: string; stderr?: string };
-			const output = err.stdout || '';
-			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-			assert.match(output, /Missing 1 required arg/);
+			const err = error as Error & { stdout?: string; status?: number };
+			assert.strictEqual(err.stdout, '✗ --backup must be provided\nSee more help with --help\n');
+			assert.strictEqual(err.status, 2);
 		}
 	});
 });
