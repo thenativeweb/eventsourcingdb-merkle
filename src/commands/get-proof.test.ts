@@ -6,6 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
 
+// Stored hashes of version 1, in the form in which EventSourcingDB stores them.
+const firstHash = 'a1'.repeat(32);
+const secondHash = 'b2'.repeat(32);
+
 describe('get-proof', () => {
 	const testDir = join(tmpdir(), 'esdb-test');
 	const testBackup = `${testDir}/proof-test.json`;
@@ -28,7 +32,7 @@ describe('get-proof', () => {
 						predecessorhash: '0'.repeat(64),
 						data: { value: 'test' },
 					},
-					hash: 'abc123',
+					hash: firstHash,
 				},
 			},
 			{
@@ -42,10 +46,10 @@ describe('get-proof', () => {
 						subject: '/test/1',
 						type: 'test.event',
 						datacontenttype: 'application/json',
-						predecessorhash: 'abc123',
+						predecessorhash: firstHash,
 						data: { value: 'test2' },
 					},
-					hash: 'def456',
+					hash: secondHash,
 				},
 			},
 		];
@@ -356,6 +360,65 @@ describe('get-proof', () => {
 				),
 				output,
 			);
+		});
+	});
+
+	describe('with a stored hash of no known form', () => {
+		const brokenBackup = join(testDir, 'get-proof-broken-hash.json');
+
+		before(() => {
+			mkdirSync(testDir, { recursive: true });
+			writeFileSync(
+				brokenBackup,
+				JSON.stringify({
+					type: 'event',
+					payload: {
+						event: {
+							specversion: '1.0',
+							id: '0',
+							time: '2024-01-01T00:00:00Z',
+							source: 'test',
+							subject: '/test/0',
+							type: 'test.event',
+							datacontenttype: 'application/json',
+							predecessorhash: '0'.repeat(64),
+							data: { value: 'test' },
+						},
+						hash: 'abc123',
+					},
+				}),
+			);
+		});
+
+		const runCommand = (args: string[]): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync('node', ['./dist/index.js', 'get-proof', ...args], {
+						encoding: 'utf-8',
+					}),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		it('refuses it in the tree of version 2, naming the event', () => {
+			assert.deepStrictEqual(runCommand([`--backup=${brokenBackup}`, '--event-id=0']), {
+				output: '✗ Failed to generate Merkle proof: event 0 has no hash of version 1 or 2\n',
+				exitCode: 1,
+			});
+		});
+
+		it('takes it in the tree of version 1, as releases before 3.0 did', () => {
+			const { output, exitCode } = runCommand([
+				`--backup=${brokenBackup}`,
+				'--event-id=0',
+				'--tree-version=1',
+			]);
+
+			assert.strictEqual(exitCode, 0, output);
 		});
 	});
 });

@@ -1,4 +1,6 @@
 import { Flags } from '@oclif/core';
+import type { ChainEvent } from './chainEvent.js';
+import { isKnownStoredHash } from './hash.js';
 import type { MerkleTreeOptions } from './merkleTree.js';
 import { readSaltKey } from './saltKey.js';
 
@@ -49,4 +51,20 @@ export const readTreeOptions = async (tree: Tree): Promise<MerkleTreeOptions> =>
 	}
 
 	return { treeVersion: 2, saltKey: await readSaltKey(tree.saltKeyFile) };
+};
+
+// getTreeHashes returns the stored hashes of the events, as the leaves of the
+// tree. The tree of version 2 takes only hashes of a form it knows, since only
+// they keep the data of a leaf unambiguous, which is why verify-proof refuses
+// any other: a root over such a leaf would hold a leaf that no proof could
+// prove. The tree of version 1 takes any hash, as it always did.
+export const getTreeHashes = (events: ChainEvent[], treeOptions: MerkleTreeOptions): string[] => {
+	if (treeOptions.treeVersion === 2) {
+		const event = events.find(({ hash }) => !isKnownStoredHash(hash));
+		if (event !== undefined) {
+			throw new Error(`event ${event.id} has no hash of version 1 or 2`);
+		}
+	}
+
+	return events.map(({ hash }) => hash);
 };

@@ -4,7 +4,7 @@ import { describeError } from '../lib/describeError.js';
 import { parseEventId } from '../lib/eventId.js';
 import { calculateMerkleRoot } from '../lib/merkleTree.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
-import { getTree, getTreeFlags, readTreeOptions } from '../lib/tree.js';
+import { getTree, getTreeFlags, getTreeHashes, readTreeOptions } from '../lib/tree.js';
 
 export default class MerkleRoot extends BaseCommand {
 	static override description =
@@ -52,7 +52,7 @@ export default class MerkleRoot extends BaseCommand {
 		try {
 			const treeOptions = await readTreeOptions(tree);
 			const events = await readEvents(source, { lastEventId });
-			const hashes = events.map(event => event.hash);
+			const hashes = getTreeHashes(events, treeOptions);
 			const merkleRoot = calculateMerkleRoot(hashes, treeOptions);
 
 			// The ID of the last event is what calculates this root again later,

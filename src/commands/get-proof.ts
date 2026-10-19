@@ -5,7 +5,7 @@ import { describeError } from '../lib/describeError.js';
 import { parseEventId } from '../lib/eventId.js';
 import { generateMerkleProof } from '../lib/merkleTree.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
-import { getTree, getTreeFlags, readTreeOptions } from '../lib/tree.js';
+import { getTree, getTreeFlags, getTreeHashes, readTreeOptions } from '../lib/tree.js';
 import type { MerkleProof } from '../lib/types.js';
 
 export default class GetProof extends BaseCommand {
@@ -88,7 +88,7 @@ export default class GetProof extends BaseCommand {
 				return;
 			}
 
-			const hashes = events.map(e => e.hash);
+			const hashes = getTreeHashes(events, treeOptions);
 			const proofData = generateMerkleProof(hashes, events.indexOf(event), treeOptions);
 
 			const proof: MerkleProof = {

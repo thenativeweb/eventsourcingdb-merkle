@@ -62,6 +62,10 @@ const writeKeyFile = (text: string): string => {
 	return filePath;
 };
 
+// Stored hashes of version 1, in the form in which EventSourcingDB stores them.
+const firstHash = 'a1'.repeat(32);
+const secondHash = 'b2'.repeat(32);
+
 describe('merkle-root', () => {
 	const testDir = join(tmpdir(), 'esdb-test');
 	const testBackup = `${testDir}/merkle-test.json`;
@@ -84,7 +88,7 @@ describe('merkle-root', () => {
 						predecessorhash: '0'.repeat(64),
 						data: { value: 'test' },
 					},
-					hash: 'abc123',
+					hash: firstHash,
 				},
 			},
 			{
@@ -98,10 +102,10 @@ describe('merkle-root', () => {
 						subject: '/test/1',
 						type: 'test.event',
 						datacontenttype: 'application/json',
-						predecessorhash: 'abc123',
+						predecessorhash: firstHash,
 						data: { value: 'test2' },
 					},
-					hash: 'def456',
+					hash: secondHash,
 				},
 			},
 		];
@@ -158,10 +162,10 @@ describe('merkle-root', () => {
 			'node ./dist/index.js merkle-root --backup=test-fixtures/backup-with-schema.ndjson',
 			{ encoding: 'utf-8' },
 		);
-		const [firstHash = '', secondHash = ''] = readStoredHashes(
+		const [firstStoredHash = '', secondStoredHash = ''] = readStoredHashes(
 			'test-fixtures/backup-with-schema.ndjson',
 		);
-		const expectedRoot = formatRoot(getNode(getLeaf(firstHash), getLeaf(secondHash)));
+		const expectedRoot = formatRoot(getNode(getLeaf(firstStoredHash), getLeaf(secondStoredHash)));
 
 		assert.match(output, new RegExp(`Merkle Root: ${expectedRoot}`));
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -317,6 +321,61 @@ describe('merkle-root', () => {
 				output,
 				'✗ Failed to calculate Merkle root: the backup holds no event with ID 9\n',
 			);
+		});
+	});
+
+	describe('with a stored hash of no known form', () => {
+		const brokenBackup = join(testDir, 'merkle-root-broken-hash.json');
+
+		before(() => {
+			mkdirSync(testDir, { recursive: true });
+			writeFileSync(
+				brokenBackup,
+				JSON.stringify({
+					type: 'event',
+					payload: {
+						event: {
+							specversion: '1.0',
+							id: '0',
+							time: '2024-01-01T00:00:00Z',
+							source: 'test',
+							subject: '/test/0',
+							type: 'test.event',
+							datacontenttype: 'application/json',
+							predecessorhash: '0'.repeat(64),
+							data: { value: 'test' },
+						},
+						hash: 'abc123',
+					},
+				}),
+			);
+		});
+
+		const runCommand = (args: string[]): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync('node', ['./dist/index.js', 'merkle-root', ...args], {
+						encoding: 'utf-8',
+					}),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		it('refuses it in the tree of version 2, naming the event', () => {
+			assert.deepStrictEqual(runCommand([`--backup=${brokenBackup}`]), {
+				output: '✗ Failed to calculate Merkle root: event 0 has no hash of version 1 or 2\n',
+				exitCode: 1,
+			});
+		});
+
+		it('takes it in the tree of version 1, as releases before 3.0 did', () => {
+			const { output, exitCode } = runCommand([`--backup=${brokenBackup}`, '--tree-version=1']);
+
+			assert.strictEqual(exitCode, 0, output);
 		});
 	});
 });
