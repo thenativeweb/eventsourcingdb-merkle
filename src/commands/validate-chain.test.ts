@@ -145,6 +145,14 @@ describe('validate-chain', () => {
 		assert.match(output, /✓ Chain is valid \(3 events\)/);
 	});
 
+	it('validates the chain of a backup that holds events of both versions of the hash', () => {
+		const output = execSync(
+			'node ./dist/index.js validate-chain test-fixtures/backup-with-both-hash-versions.ndjson',
+			{ encoding: 'utf-8' },
+		);
+		assert.strictEqual(output, '✓ Chain is valid (4 events)\n');
+	});
+
 	it('handles missing file gracefully', () => {
 		assert.throws(
 			() => {
