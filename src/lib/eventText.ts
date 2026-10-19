@@ -20,7 +20,9 @@ const isEvent = (value: unknown): value is CloudEvent & { hash?: unknown } => {
 // of read-events, which holds the event with its hash, or the event alone, as
 // an SDK hands it on, with its hash or without. The data is taken from the text
 // rather than from what JSON.parse makes of it, since the hash covers it as
-// EventSourcingDB wrote it. Text in any other form gives undefined.
+// EventSourcingDB wrote it. Text in any other form gives undefined, a line
+// whose payload is neither of the two included, since a line carries no spec
+// version of its own and so is never taken for an event alone.
 export const readEventText = (text: string): EventFromText | undefined => {
 	const parsed: unknown = JSON.parse(text);
 
@@ -41,8 +43,6 @@ export const readEventText = (text: string): EventFromText | undefined => {
 				originalDataString: getCompactValue(text, ['payload', 'data']),
 			};
 		}
-
-		return undefined;
 	}
 
 	if (isEvent(parsed)) {

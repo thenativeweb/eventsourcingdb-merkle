@@ -45,6 +45,14 @@ Event 42: Hash mismatch: expected abc..., got def...
 Event 43: Predecessor hash mismatch: expected def..., got ghi...
 ```
 
+An event whose hash names a version of the hash that the tool does not know is listed as such, rather than as a mismatch:
+
+```
+Event 44: Unsupported hash version: v3
+```
+
+Such an event cannot be verified, which is not the same as being tampered with, and a newer version of the tool may know its version.
+
 *Note that the command will exit with a non-zero exit code if the chain is invalid, which makes it suitable for use in CI/CD pipelines.*
 
 ### Calculating the Merkle Root
@@ -93,10 +101,10 @@ Calculated hash: def456...
 
 #### Validating an Event from JSON
 
-You can also validate an event provided as a JSON string. This is useful when you receive an event from an external source and want to verify its hash without having access to the backup file:
+You can also validate an event provided as a JSON string. This is useful when you receive an event from an external source and want to verify its hash without having access to the backup file. The command takes a line of a backup, a line of `read-events`, or an event on its own, as a client SDK hands it on, with its hash:
 
 ```shell
-eventsourcingdb-merkle validate-event-hash --event='{"specversion":"1.0","id":"0",...}'
+eventsourcingdb-merkle validate-event-hash --event='{"specversion":"1.0","id":"0",...,"hash":"esdb:hash:v2:..."}'
 ```
 
 If you provide a CloudEvent without a stored hash, the command simply calculates and displays the hash:
@@ -195,9 +203,14 @@ Merkle Root: d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
 
 ## Understanding the Technical Details
 
-The tool implements Merkle trees using SHA-256 hashing, following the EventSourcingDB specification for event hash calculation. Event hashes are computed by first creating a metadata string from the CloudEvents fields, then hashing the metadata and the data separately, and finally hashing the concatenation of both hashes. The data is hashed as it appears in the backup or in the event given with `--event`, rather than parsed and serialized again, since that would change escape sequences such as `\u003c` for `<` and the notation of numbers. Only the whitespace between its tokens is left out, which EventSourcingDB never writes, so that an event formatted afterwards, as by a viewer or by `jq` without `-c`, still verifies.
+The tool implements Merkle trees using SHA-256 hashing, following the EventSourcingDB specification for event hash calculation, which knows two versions. An event keeps the version of the hash it was written with, so the tool verifies every hash in the version it names:
 
-The Merkle tree is constructed by treating event hashes as leaf nodes. Internal nodes are created by hashing the concatenation of their child hashes. If the number of nodes at any level is odd, the last node is duplicated to create a complete binary tree. This process continues until a single root hash remains.
+- A hash of version 2, which EventSourcingDB writes from release 1.3 on, starts with `esdb:hash:v2:`. It is the SHA-256 of that prefix and of the fields `specversion`, `id`, `predecessorhash`, `time`, `source`, `subject`, `type`, `datacontenttype`, `traceparent`, `tracestate`, and `data`, each on a line of its own, with `-` for a field that the event does not have.
+- A hash without a prefix is of version 1. It is computed by first creating a metadata string from the CloudEvents fields, then hashing the metadata and the data separately, and finally hashing the concatenation of both hashes. It covers neither `traceparent` nor `tracestate`.
+
+In both versions, the data is hashed as it appears in the backup or in the event given with `--event`, rather than parsed and serialized again, since that would change escape sequences such as `\u003c` for `<` and the notation of numbers. Only the whitespace between its tokens is left out, which EventSourcingDB never writes, so that an event formatted afterwards, as by a viewer or by `jq` without `-c`, still verifies.
+
+The Merkle tree is constructed by treating event hashes, as they are stored, prefix included, as leaf nodes. Internal nodes are created by hashing the concatenation of their child hashes. If the number of nodes at any level is odd, the last node is duplicated to create a complete binary tree. This process continues until a single root hash remains.
 
 Backup files are expected to be in the NDJSON format that EventSourcingDB writes on `/api/v1/backup`, where each line contains a JSON object with a `type` and a `payload` field. A line of the type `event` holds a CloudEvents-compliant event and its hash. A line of the type `schema` holds the schema of an event type, which the tool skips, since neither the hashes nor the chain cover it. A backup that holds a line of the type `error` was cut short, and the tool refuses it, as it refuses a line of any other type or one that is not valid JSON, naming the line.
 
