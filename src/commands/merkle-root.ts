@@ -23,7 +23,9 @@ export default class MerkleRoot extends BaseCommand {
 		'last-event-id': Flags.string({
 			description: 'ID of the last event to cover, to calculate the root of an earlier state again',
 		}),
-		...getTreeFlags('Version of the Merkle tree: 1 for roots that releases before 3.0 calculated'),
+		...getTreeFlags(
+			'Version of the Merkle tree: 1 for roots that releases before 3.0 calculated, 2 for roots that release 3.0 calculated',
+		),
 	};
 
 	static override args = {};

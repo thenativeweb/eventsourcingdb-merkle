@@ -1,5 +1,5 @@
 import { hashPair } from './hash.js';
-import type { MerkleProof } from './types.js';
+import type { MerkleProofWithSides, SiblingWithSide } from './types.js';
 
 // The Merkle tree of version 1, which releases before 3.0 calculated. It hashes
 // leaves and inner nodes alike, and pairs a node that is left without a partner
@@ -42,14 +42,14 @@ export const buildVersion1Root = (hashes: string[]): string => {
 export const generateVersion1Proof = (
 	hashes: string[],
 	targetHash: string,
-): Omit<MerkleProof, 'eventId'> => {
+): Omit<MerkleProofWithSides, 'eventId'> => {
 	const targetIndex = hashes.indexOf(targetHash);
 
 	if (targetIndex === -1) {
 		throw new Error('Target hash not found in the list');
 	}
 
-	const siblingHashes: Array<{ hash: string; position: 'left' | 'right' }> = [];
+	const siblingHashes: SiblingWithSide[] = [];
 	let currentLevel = [...hashes];
 	let currentIndex = targetIndex;
 
@@ -97,7 +97,7 @@ export const generateVersion1Proof = (
 	};
 };
 
-export const verifyVersion1Proof = (proof: Omit<MerkleProof, 'eventId'>): boolean => {
+export const verifyVersion1Proof = (proof: Omit<MerkleProofWithSides, 'eventId'>): boolean => {
 	let currentHash = proof.eventHash;
 
 	for (const { hash, position } of proof.siblingHashes) {

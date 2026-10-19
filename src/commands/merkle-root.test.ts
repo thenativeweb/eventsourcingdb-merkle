@@ -15,8 +15,10 @@ const sha256 = (...parts: (Buffer | string)[]): Buffer => {
 	return hash.digest();
 };
 
-// The leaves and inner nodes of the tree of version 2, calculated step by step
-// as RFC 6962 defines them, with the salt that the key derives for a leaf.
+// The leaves and inner nodes of the trees of versions 2 and 3, calculated step
+// by step as RFC 6962 defines them, with the salt that the key derives for a
+// leaf. The root of version 3 hashes the size of the tree, as 8 bytes,
+// big-endian, together with the root of version 2.
 const getLeaf = (storedHash: string, saltKey?: Buffer): Buffer =>
 	sha256(
 		Buffer.from([0x00]),
@@ -26,7 +28,13 @@ const getLeaf = (storedHash: string, saltKey?: Buffer): Buffer =>
 		storedHash,
 	);
 const getNode = (left: Buffer, right: Buffer): Buffer => sha256(Buffer.from([0x01]), left, right);
-const formatRoot = (root: Buffer): string => `esdb:merkle:v2:${root.toString('hex')}`;
+const formatVersion2Root = (root: Buffer): string => `esdb:merkle:v2:${root.toString('hex')}`;
+const formatVersion3Root = (size: number, root: Buffer): string => {
+	const sizeBytes = Buffer.alloc(8);
+	sizeBytes.writeBigUInt64BE(BigInt(size));
+
+	return `esdb:merkle:v3:${sha256(Buffer.from([0x02]), sizeBytes, root).toString('hex')}`;
+};
 
 const readStoredHashes = (filePath: string): string[] =>
 	readFileSync(filePath, 'utf-8')
@@ -51,7 +59,7 @@ const run = (args: string[]): { output: string; exitCode: number } => {
 };
 
 const twoEventsUpToEvent1 =
-	/^Merkle Root: esdb:merkle:v2:[0-9a-f]{64}\nTotal events: 2\nLast event ID: 1\n$/u;
+	/^Merkle Root: esdb:merkle:v3:[0-9a-f]{64}\nTotal events: 2\nLast event ID: 1\n$/u;
 
 const keyDigits = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
@@ -165,45 +173,63 @@ describe('merkle-root', () => {
 		const [firstStoredHash = '', secondStoredHash = ''] = readStoredHashes(
 			'test-fixtures/backup-with-schema.ndjson',
 		);
-		const expectedRoot = formatRoot(getNode(getLeaf(firstStoredHash), getLeaf(secondStoredHash)));
+		const expectedRoot = formatVersion3Root(
+			2,
+			getNode(getLeaf(firstStoredHash), getLeaf(secondStoredHash)),
+		);
 
 		assert.match(output, new RegExp(`Merkle Root: ${expectedRoot}`));
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
 		assert.match(output, /Total events: 2/);
 	});
 
-	describe('in either version of the tree', () => {
+	describe('in every version of the tree', () => {
 		const backup = '--backup=test-fixtures/backup-with-both-hash-versions.ndjson';
 		const hashes = readStoredHashes('test-fixtures/backup-with-both-hash-versions.ndjson');
 		const [first = '', second = '', third = '', fourth = ''] = hashes;
-
-		it('builds the tree of version 2 from the hashes as they are stored, of either version', () => {
-			const expectedRoot = formatRoot(
-				getNode(getNode(getLeaf(first), getLeaf(second)), getNode(getLeaf(third), getLeaf(fourth))),
+		const getRootOfVersion2 = (saltKey?: Buffer): Buffer =>
+			getNode(
+				getNode(getLeaf(first, saltKey), getLeaf(second, saltKey)),
+				getNode(getLeaf(third, saltKey), getLeaf(fourth, saltKey)),
 			);
 
+		it('builds the tree of version 3 by default, from the hashes as they are stored, of either version', () => {
 			assert.strictEqual(hashes.length, 4);
 			assert.deepStrictEqual(run([backup]), {
-				output: `Merkle Root: ${expectedRoot}\nTotal events: 4\nLast event ID: 3\n`,
+				output: `Merkle Root: ${formatVersion3Root(4, getRootOfVersion2())}\nTotal events: 4\nLast event ID: 3\n`,
 				exitCode: 0,
 			});
-			assert.deepStrictEqual(run([backup, '--tree-version=2']), run([backup]));
+			assert.deepStrictEqual(run([backup, '--tree-version=3']), run([backup]));
 		});
 
-		it('salts the leaves with the key from the salt key file', () => {
-			const saltKey = Buffer.from(keyDigits, 'hex');
-			const expectedRoot = formatRoot(
-				getNode(
-					getNode(getLeaf(first, saltKey), getLeaf(second, saltKey)),
-					getNode(getLeaf(third, saltKey), getLeaf(fourth, saltKey)),
-				),
-			);
-
-			assert.deepStrictEqual(run([backup, `--salt-key-file=${writeKeyFile(`${keyDigits}\n`)}`]), {
-				output: `Merkle Root: ${expectedRoot}\nTotal events: 4\nLast event ID: 3\n`,
+		it('builds the tree of version 2 as release 3.0 did', () => {
+			assert.deepStrictEqual(run([backup, '--tree-version=2']), {
+				output: `Merkle Root: ${formatVersion2Root(getRootOfVersion2())}\nTotal events: 4\nLast event ID: 3\n`,
 				exitCode: 0,
 			});
 		});
+
+		for (const treeVersion of ['2', '3']) {
+			it(`salts the leaves of version ${treeVersion} with the key from the salt key file`, () => {
+				const saltKey = Buffer.from(keyDigits, 'hex');
+				const expectedRoot =
+					treeVersion === '2'
+						? formatVersion2Root(getRootOfVersion2(saltKey))
+						: formatVersion3Root(4, getRootOfVersion2(saltKey));
+
+				assert.deepStrictEqual(
+					run([
+						backup,
+						`--tree-version=${treeVersion}`,
+						`--salt-key-file=${writeKeyFile(`${keyDigits}\n`)}`,
+					]),
+					{
+						output: `Merkle Root: ${expectedRoot}\nTotal events: 4\nLast event ID: 3\n`,
+						exitCode: 0,
+					},
+				);
+			});
+		}
 
 		it('calculates the root of version 1 as releases before 3.0 did', () => {
 			const pair = (left: string, right: string): string =>
@@ -227,8 +253,8 @@ describe('merkle-root', () => {
 		});
 
 		it('refuses a version of the tree that it does not know', () => {
-			assert.deepStrictEqual(run([backup, '--tree-version=3']), {
-				output: '✗ Expected --tree-version=3 to be one of: 1, 2\nSee more help with --help\n',
+			assert.deepStrictEqual(run([backup, '--tree-version=4']), {
+				output: '✗ Expected --tree-version=4 to be one of: 1, 2, 3\nSee more help with --help\n',
 				exitCode: 2,
 			});
 		});
@@ -264,7 +290,7 @@ describe('merkle-root', () => {
 			);
 			assert.ok(
 				output.includes(
-					'Version of the Merkle tree: 1 for roots that releases before 3.0 calculated',
+					'Version of the Merkle tree: 1 for roots that releases before 3.0 calculated, 2 for roots that release 3.0 calculated',
 				),
 				output,
 			);
@@ -365,17 +391,80 @@ describe('merkle-root', () => {
 			}
 		};
 
-		it('refuses it in the tree of version 2, naming the event', () => {
-			assert.deepStrictEqual(runCommand([`--backup=${brokenBackup}`]), {
-				output: '✗ Failed to calculate Merkle root: event 0 has no hash of version 1 or 2\n',
-				exitCode: 1,
+		for (const treeVersion of ['2', '3']) {
+			it(`refuses it in the tree of version ${treeVersion}, naming the event`, () => {
+				assert.deepStrictEqual(
+					runCommand([`--backup=${brokenBackup}`, `--tree-version=${treeVersion}`]),
+					{
+						output: '✗ Failed to calculate Merkle root: event 0 has no hash of version 1 or 2\n',
+						exitCode: 1,
+					},
+				);
 			});
-		});
+		}
 
 		it('takes it in the tree of version 1, as releases before 3.0 did', () => {
 			const { output, exitCode } = runCommand([`--backup=${brokenBackup}`, '--tree-version=1']);
 
 			assert.strictEqual(exitCode, 0, output);
 		});
+	});
+
+	describe('with event IDs that do not run from 0 without gaps', () => {
+		const writeBackup = (ids: string[]): string => {
+			const filePath = join(mkdtempSync(join(tmpdir(), 'esdb-merkle-')), 'backup.json');
+			const storedHashes = [firstHash, secondHash];
+			writeFileSync(
+				filePath,
+				ids
+					.map((id, index) =>
+						JSON.stringify({
+							type: 'event',
+							payload: {
+								event: {
+									specversion: '1.0',
+									id,
+									time: '2024-01-01T00:00:00Z',
+									source: 'test',
+									subject: '/test',
+									type: 'test.event',
+									datacontenttype: 'application/json',
+									predecessorhash: index === 0 ? '0'.repeat(64) : storedHashes[index - 1],
+									data: {},
+								},
+								hash: storedHashes[index],
+							},
+						}),
+					)
+					.join('\n'),
+			);
+
+			return `--backup=${filePath}`;
+		};
+
+		for (const [name, ids, problem] of [
+			['a first event other than event 0', ['1', '2'], 'event 1 is at position 0'],
+			['a gap', ['0', '2'], 'event 2 is at position 1'],
+			['an ID twice', ['0', '0'], 'event 0 is at position 1'],
+			['an ID in another notation', ['0', '01'], 'event 01 is at position 1'],
+		] as const) {
+			it(`refuses a source with ${name} in the tree of version 3`, () => {
+				assert.deepStrictEqual(run([writeBackup([...ids])]), {
+					output: `✗ Failed to calculate Merkle root: ${problem} of the source, but the IDs of the events have to run from 0 without gaps\n`,
+					exitCode: 1,
+				});
+			});
+
+			it(`takes a source with ${name} in the trees of versions 1 and 2, as their releases did`, () => {
+				for (const treeVersion of ['1', '2']) {
+					const { output, exitCode } = run([
+						writeBackup([...ids]),
+						`--tree-version=${treeVersion}`,
+					]);
+
+					assert.strictEqual(exitCode, 0, output);
+				}
+			});
+		}
 	});
 });
