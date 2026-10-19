@@ -105,7 +105,7 @@ eventsourcingdb-merkle generate-salt-key --output=merkle.key
 eventsourcingdb-merkle merkle-root --backup=backup.json --salt-key-file=merkle.key
 ```
 
-The key file holds 64 hexadecimal digits. `generate-salt-key` never overwrites a file, and it lets only the owner of the file read the key, and nobody write it. Keep the key as long as the root, and as safely as a password: a root calculated with it is calculated again with that key only, so without it, no further proof can be generated for the root, and whoever has it can calculate the salt of every leaf. A proof carries the salt of its own leaf, so verifying it needs no key.
+The key file holds 64 hexadecimal digits. `generate-salt-key` never overwrites a file, and it lets nobody write the key, and on Linux and macOS, only the owner of the file read it. Windows knows only whether a file is read-only, so there, who can read the key follows from the permissions of its folder. Keep the key as long as the root, and as safely as a password: a root calculated with it is calculated again with that key only, so without it, no further proof can be generated for the root, and whoever has it can calculate the salt of every leaf. A proof carries the salt of its own leaf, so verifying it needs no key.
 
 #### Calculating a Root of Version 1
 

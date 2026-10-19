@@ -1,5 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, type FileHandle, open, readFile, unlink } from 'node:fs/promises';
 
 // A salt key is 32 random bytes: RFC 2104 discourages keys for HMAC that are
 // shorter than the output of the hash, and longer ones add nothing. It is kept
@@ -28,20 +28,40 @@ export const readSaltKey = async (filePath: string): Promise<Buffer> => {
 };
 
 // writeSaltKey never overwrites a file, since a root whose leaves were salted
-// with a key gets no further proof once the key is gone. Only the owner of the
-// file may read it, and nobody may write it, so that it is not replaced by
-// accident either, as by a command that redirects its output into it.
+// with a key gets no further proof once the key is gone. Nobody may write the
+// file, so that it is not replaced by accident either, as by a command that
+// redirects its output into it, and on Linux and macOS, only its owner may read
+// it. Windows knows only whether a file is read-only, so there, who may read it
+// follows from the permissions of its folder.
 export const writeSaltKey = async (filePath: string): Promise<void> => {
 	const digits = randomBytes(saltKeyLength).toString('hex');
 
+	let file: FileHandle;
 	try {
-		await writeFile(filePath, `${digits}\n`, { flag: 'wx', mode: 0o400 });
+		file = await open(filePath, 'wx', 0o400);
 	} catch (error) {
 		if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
 			throw new Error(`${filePath} already exists`);
 		}
 		throw error;
 	}
+
+	// A root may be calculated and published with the key right after it was
+	// written, so the key reaches the disk before it counts as written. A file
+	// that could not be written completely is removed again, so that it neither
+	// passes for a key nor keeps the next attempt from writing one; its write
+	// permission comes back first, without which Windows does not remove it.
+	try {
+		await file.writeFile(`${digits}\n`);
+		await file.sync();
+	} catch (error) {
+		await file.close();
+		await chmod(filePath, 0o600);
+		await unlink(filePath);
+		throw error;
+	}
+
+	await file.close();
 };
 
 // deriveSalt derives the salt of a leaf from the key and the stored hash of its

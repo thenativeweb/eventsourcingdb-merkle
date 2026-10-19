@@ -1,5 +1,6 @@
 import assert from 'node:assert';
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { type FileHandle, open } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -9,6 +10,15 @@ const getTemporaryPath = (name: string): string =>
 	join(mkdtempSync(join(tmpdir(), 'esdb-merkle-salt-key-')), name);
 
 const saltKeyFilePattern = /^[0-9a-f]{64}\n$/u;
+
+// The prototype of the handles that node:fs/promises opens files with, whose
+// methods the tests replace to see when a key reaches the disk.
+const getFileHandlePrototype = async (): Promise<FileHandle> => {
+	const file = await open(getTemporaryPath('probe'), 'w');
+	await file.close();
+
+	return Object.getPrototypeOf(file) as FileHandle;
+};
 
 const keyDigits = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
@@ -97,6 +107,31 @@ describe('writeSaltKey', () => {
 		const filePath = join(getTemporaryPath('missing'), 'merkle.key');
 
 		await assert.rejects(writeSaltKey(filePath), { code: 'ENOENT' });
+	});
+
+	it('flushes the key to the disk before it returns', async test => {
+		const filePath = getTemporaryPath('merkle.key');
+		const prototype = await getFileHandlePrototype();
+		const syncedTexts: string[] = [];
+		const { sync } = prototype;
+		test.mock.method(prototype, 'sync', async function (this: FileHandle) {
+			syncedTexts.push(readFileSync(filePath, 'utf-8'));
+			await sync.call(this);
+		});
+
+		await writeSaltKey(filePath);
+
+		assert.deepStrictEqual(syncedTexts, [readFileSync(filePath, 'utf-8')]);
+	});
+
+	it('removes a key that it could not write completely', async test => {
+		const filePath = getTemporaryPath('merkle.key');
+		test.mock.method(await getFileHandlePrototype(), 'sync', () =>
+			Promise.reject(new Error('the disk failed')),
+		);
+
+		await assert.rejects(writeSaltKey(filePath), { message: 'the disk failed' });
+		assert.strictEqual(existsSync(filePath), false);
 	});
 });
 
