@@ -1,7 +1,7 @@
 import assert from 'node:assert';
 import { execFileSync, execSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
@@ -245,7 +245,18 @@ describe('get-proof', () => {
 			const { output, exitCode } = run('get-proof', [...salted, '--event-id=2', '--json']);
 			assert.strictEqual(exitCode, 0, output);
 			const proof = JSON.parse(output) as Proof;
+			const storedHashes = readFileSync(
+				'test-fixtures/backup-with-both-hash-versions.ndjson',
+				'utf-8',
+			)
+				.trimEnd()
+				.split('\n')
+				.map(line => JSON.parse(line) as { type: string; payload: { hash?: string } })
+				.filter(line => line.type === 'event')
+				.map(line => line.payload.hash);
 
+			assert.strictEqual(proof.eventId, '2');
+			assert.strictEqual(proof.eventHash, storedHashes[2]);
 			assert.deepStrictEqual(Object.keys(proof), [
 				'eventId',
 				'eventHash',
@@ -315,11 +326,15 @@ describe('get-proof', () => {
 			);
 		});
 
-		it('reports a salt key file that does not exist', () => {
+		it('reads the salt key before the source, and reports one that does not exist', () => {
 			const missingKeyFile = join(tmpdir(), 'esdb-merkle-missing.key');
 
 			assert.deepStrictEqual(
-				run('get-proof', [backup, '--event-id=2', `--salt-key-file=${missingKeyFile}`]),
+				run('get-proof', [
+					'--backup=/nonexistent/file.json',
+					'--event-id=2',
+					`--salt-key-file=${missingKeyFile}`,
+				]),
 				{
 					output: `✗ Failed to generate Merkle proof: File not found: ${missingKeyFile}\n`,
 					exitCode: 1,
