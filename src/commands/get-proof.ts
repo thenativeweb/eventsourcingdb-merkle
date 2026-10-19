@@ -5,6 +5,7 @@ import { describeError } from '../lib/describeError.js';
 import { parseEventId } from '../lib/eventId.js';
 import { generateMerkleProof } from '../lib/merkleTree.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
+import { getTree, getTreeFlags, getTreeHashes, readTreeOptions } from '../lib/tree.js';
 import type { MerkleProof } from '../lib/types.js';
 
 export default class GetProof extends BaseCommand {
@@ -15,6 +16,7 @@ export default class GetProof extends BaseCommand {
 		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42',
 		'<%= config.bin %> <%= command.id %> --backup=/path/to/backup.json --event-id=0 --json',
 		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42 --last-event-id=1234566',
+		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42 --salt-key-file=merkle.key',
 		'<%= config.bin %> <%= command.id %> --esdb-url=http://localhost:3000 --esdb-api-token="$ESDB_API_TOKEN" --event-id=42',
 	];
 
@@ -26,6 +28,9 @@ export default class GetProof extends BaseCommand {
 				'ID of the last event the root covers, to prove against the root of an earlier state',
 		}),
 		json: Flags.boolean({ description: 'Output proof as JSON' }),
+		...getTreeFlags(
+			'Version of the Merkle tree: 1 to prove against roots that releases before 3.0 calculated',
+		),
 	};
 
 	static override args = {};
@@ -51,7 +56,14 @@ export default class GetProof extends BaseCommand {
 			return;
 		}
 
+		const tree = getTree(flags);
+		if ('refusal' in tree) {
+			this.refuseCall(tree.refusal);
+			return;
+		}
+
 		try {
+			const treeOptions = await readTreeOptions(tree);
 			const events = await readEvents(source, { lastEventId });
 
 			// An event after the last one is not part of the tree, so it has no
@@ -76,8 +88,8 @@ export default class GetProof extends BaseCommand {
 				return;
 			}
 
-			const hashes = events.map(e => e.hash);
-			const proofData = generateMerkleProof(hashes, event.hash);
+			const hashes = getTreeHashes(events, treeOptions);
+			const proofData = generateMerkleProof(hashes, events.indexOf(event), treeOptions);
 
 			const proof: MerkleProof = {
 				eventId: event.id,
@@ -92,6 +104,9 @@ export default class GetProof extends BaseCommand {
 			this.log(`Merkle Proof for Event ${proof.eventId}`);
 			this.log('');
 			this.log(`Event Hash: ${proof.eventHash}`);
+			if (proof.salt !== undefined) {
+				this.log(`Salt: ${proof.salt}`);
+			}
 			this.log(`Merkle Root: ${proof.merkleRoot}`);
 			this.log('');
 			this.log(`Sibling Hashes (${proof.siblingHashes.length}):`);

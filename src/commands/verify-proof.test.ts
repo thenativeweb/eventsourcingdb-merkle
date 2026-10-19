@@ -1,5 +1,6 @@
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,5 +103,94 @@ describe('verify-proof', () => {
 			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
 			assert.match(output, /Missing 1 required arg/);
 		}
+	});
+
+	describe('in either version of the tree', () => {
+		const run = (proofToVerify: unknown): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync(
+						'node',
+						['./dist/index.js', 'verify-proof', JSON.stringify(proofToVerify)],
+						{
+							encoding: 'utf-8',
+						},
+					),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		// A proof of version 2 over a tree of a single, salted leaf, whose root is
+		// the hash of that leaf.
+		const salt = '1010101010101010101010101010101010101010101010101010101010101010';
+		const eventHash = `esdb:hash:v2:${'ab'.repeat(32)}`;
+		const proof = {
+			eventId: '0',
+			eventHash,
+			salt,
+			siblingHashes: [],
+			merkleRoot: `esdb:merkle:v2:${createHash('sha256')
+				.update(Buffer.from([0x00]))
+				.update(Buffer.from(salt, 'hex'))
+				.update(eventHash)
+				.digest('hex')}`,
+		};
+
+		it('verifies a proof of version 2 with its salt', () => {
+			assert.deepStrictEqual(run(proof), {
+				output: `✓ Merkle proof is valid\nEvent ID: 0\nEvent Hash: ${eventHash}\nMerkle Root: ${proof.merkleRoot}\n`,
+				exitCode: 0,
+			});
+		});
+
+		it('rejects a proof of version 2 with another salt', () => {
+			assert.deepStrictEqual(run({ ...proof, salt: '11'.repeat(32) }), {
+				output: `✗ Merkle proof is invalid\nEvent ID: 0\nEvent Hash: ${eventHash}\nMerkle Root: ${proof.merkleRoot}\n`,
+				exitCode: 1,
+			});
+		});
+
+		it('refuses a salt that is not 64 hexadecimal digits', () => {
+			assert.deepStrictEqual(run({ ...proof, salt: salt.slice(1) }), {
+				output: '✗ Invalid proof structure\nThe salt has to be 64 hexadecimal digits\n',
+				exitCode: 1,
+			});
+		});
+
+		it('refuses an event hash that is no hash of version 1 or 2', () => {
+			assert.deepStrictEqual(run({ ...proof, eventHash: 'abc123' }), {
+				output: '✗ Invalid proof structure\nThe event hash has to be a hash of version 1 or 2\n',
+				exitCode: 1,
+			});
+		});
+
+		it('refuses a sibling that is no hash on one side', () => {
+			assert.deepStrictEqual(
+				run({ ...proof, siblingHashes: [{ hash: `${'ab'.repeat(32)}zz`, position: 'left' }] }),
+				{
+					output:
+						'✗ Invalid proof structure\nEvery sibling has to have a hash of 64 hexadecimal digits, and the position left or right\n',
+					exitCode: 1,
+				},
+			);
+		});
+
+		it('refuses a salt in a proof of version 1', () => {
+			assert.deepStrictEqual(run({ ...proof, merkleRoot: 'abc123' }), {
+				output: '✗ Invalid proof structure\nA proof of Merkle tree version 1 has no salt\n',
+				exitCode: 1,
+			});
+		});
+
+		it('refuses a root of a version of the tree that it does not know', () => {
+			assert.deepStrictEqual(run({ ...proof, merkleRoot: 'esdb:merkle:v3:abc' }), {
+				output: '✗ Failed to verify Merkle proof: Unsupported Merkle tree version: v3\n',
+				exitCode: 1,
+			});
+		});
 	});
 });

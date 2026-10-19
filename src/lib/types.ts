@@ -30,6 +30,9 @@ export interface BackupEntry {
 export interface MerkleProof {
 	eventId: string;
 	eventHash: string;
+	// The salt of the leaf of the event, in hexadecimal, where the leaves of the
+	// tree are salted.
+	salt?: string;
 	siblingHashes: Array<{
 		hash: string;
 		position: 'left' | 'right';
