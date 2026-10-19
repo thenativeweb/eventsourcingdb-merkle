@@ -22,10 +22,10 @@ npx eventsourcingdb-merkle [COMMAND]
 
 ### Validating Event Chains
 
-To ensure that a backup file has not been tampered with or corrupted, call the `validate-chain` command and provide the path to your backup file. The command verifies that each event's hash is correctly calculated, that the predecessor hash of each event matches the hash of the previous event, and that the first event has a null predecessor hash as expected:
+To ensure that a backup file has not been tampered with or corrupted, call the `validate-chain` command and provide the path to your backup file with `--backup`. The command verifies that each event's hash is correctly calculated, that the predecessor hash of each event matches the hash of the previous event, and that the first event has a null predecessor hash as expected:
 
 ```shell
-eventsourcingdb-merkle validate-chain backup.json
+eventsourcingdb-merkle validate-chain --backup=backup.json
 ```
 
 If the chain is valid, you will see a confirmation message with the total number of events:
@@ -57,18 +57,29 @@ Such an event cannot be verified, which is not the same as being tampered with, 
 
 ### Calculating the Merkle Root
 
-To calculate the Merkle root for all events in a backup file, call the `merkle-root` command and provide the path to your backup file. The Merkle root is a single hash that represents the entire event chain and can be used to verify the integrity of the backup:
+To calculate the Merkle root for all events in a backup file, call the `merkle-root` command and provide the path to your backup file with `--backup`. The Merkle root is a single hash that represents the entire event chain and can be used to verify the integrity of the backup:
 
 ```shell
-eventsourcingdb-merkle merkle-root backup.json
+eventsourcingdb-merkle merkle-root --backup=backup.json
 ```
 
-The command outputs the Merkle root and the total number of events:
+The command outputs the Merkle root, the total number of events, and the ID of the last event it covers:
 
 ```
 Merkle Root: d1f6713af7ba3896ff238bb51f3986b2bad53b09bda7f23370e0a8b6eb97eeab
 Total events: 4
+Last event ID: 3
 ```
+
+#### Calculating the Merkle Root of an Earlier State
+
+A root that you published once has to be calculated again later, for instance to generate proofs against it. Since events are never changed, a newer backup holds the events of an older one, followed by those written since. Pass the last event ID that the root covered with `--last-event-id`, and the command calculates the root over the events up to it, which is the root of the older backup:
+
+```shell
+eventsourcingdb-merkle merkle-root --backup=backup-2025.json --last-event-id=3
+```
+
+So you do not have to keep the older backup to prove against its root. If the backup holds no event with that ID, the command refuses rather than calculating a root over other events.
 
 ### Validating Individual Events
 
@@ -76,10 +87,10 @@ Sometimes you want to verify the integrity of a single event without processing 
 
 #### Validating an Event from a Backup File
 
-To validate an event by its ID from a backup file, call the `validate-event-hash` command with the `--file` and `--event-id` flags:
+To validate an event by its ID from a backup file, call the `validate-event-hash` command with the `--backup` and `--event-id` flags:
 
 ```shell
-eventsourcingdb-merkle validate-event-hash --file=backup.json --event-id=42
+eventsourcingdb-merkle validate-event-hash --backup=backup.json --event-id=42
 ```
 
 If the hash is valid, you will see a confirmation message:
@@ -107,18 +118,19 @@ You can also validate an event provided as a JSON string. This is useful when yo
 eventsourcingdb-merkle validate-event-hash --event='{"specversion":"1.0","id":"0",...,"hash":"esdb:hash:v2:..."}'
 ```
 
-If you provide a CloudEvent without a stored hash, the command simply calculates and displays the hash of version 1, since nothing tells which version is meant:
+If you provide a CloudEvent without a stored hash, the command simply calculates and displays the hash in every version, since nothing tells which version is meant:
 
 ```
-Calculated hash: abc123...
+Calculated hash (version 1): abc123...
+Calculated hash (version 2): esdb:hash:v2:def456...
 ```
 
 ### Generating Merkle Proofs
 
-A Merkle proof allows you to prove that a specific event is part of a backup without revealing the entire backup. To generate a proof for an event, call the `get-proof` command with the path to your backup file and the event ID:
+A Merkle proof allows you to prove that a specific event is part of a backup without revealing the entire backup. To generate a proof for an event, call the `get-proof` command with the path to your backup file in `--backup` and the event ID in `--event-id`:
 
 ```shell
-eventsourcingdb-merkle get-proof backup.json 42
+eventsourcingdb-merkle get-proof --backup=backup.json --event-id=42
 ```
 
 The command outputs the proof in a human-readable format:
@@ -135,12 +147,18 @@ Sibling Hashes (3):
   3. jkl012... (left)
 ```
 
+To prove an event against the root of an earlier state, pass its last event ID with `--last-event-id`, as for `merkle-root`. An event after it is not part of that tree, so the command refuses to prove it:
+
+```shell
+eventsourcingdb-merkle get-proof --backup=backup.json --event-id=42 --last-event-id=1234566
+```
+
 #### Outputting JSON
 
 To get the proof as JSON for programmatic use, add the `--json` flag:
 
 ```shell
-eventsourcingdb-merkle get-proof backup.json 42 --json
+eventsourcingdb-merkle get-proof --backup=backup.json --event-id=42 --json
 ```
 
 The output can then be saved to a file and shared with others:
