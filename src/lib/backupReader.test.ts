@@ -222,6 +222,20 @@ describe('readBackupFile with a backup that the v2 API wrote', () => {
 
 	const withoutEnd = (lines: string[]): string[] => lines.slice(0, -1);
 
+	// A full backup of an empty store, as the v2 API writes it. Appended to
+	// itself, it is a part that follows on the one before, as both name no event.
+	const emptyFull = [
+		'{"type":"backup","data":{"formatVersion":2,"lastBackedUpEvent":null}}',
+		'{"type":"end","data":{}}',
+	];
+	const withAnchor = (lines: string[], anchor: unknown): string[] => {
+		const [header = '', ...rest] = lines;
+		const backupLine = JSON.parse(header) as { data: Record<string, unknown> };
+		backupLine.data.lastBackedUpEvent = anchor;
+
+		return [JSON.stringify(backupLine), ...rest];
+	};
+
 	it('reads the events of a full backup', async () => {
 		const entries = await readBackupFile('test-fixtures/backup-v2-full.ndjson');
 
@@ -254,14 +268,33 @@ describe('readBackupFile with a backup that the v2 API wrote', () => {
 		assert.strictEqual(entries.length, 3);
 	});
 
-	it('takes an increment that names its anchor by an ID in another notation', async () => {
-		const [header, ...rest] = increment;
-		assert.ok(header);
+	for (const id of ['02', '+2']) {
+		it(`takes an increment that names its anchor by the ID ${id}, as the server reads it`, async () => {
+			const [header, ...rest] = increment;
+			assert.ok(header);
+			const entries = await readBackupFile(
+				writeBackup([...full, header.replace('"id":"2"', `"id":"${id}"`), ...rest]),
+			);
+
+			assert.strictEqual(entries.length, 5);
+		});
+	}
+
+	it('takes a part that follows on a full backup of an empty store', async () => {
+		const entries = await readBackupFile(writeBackup([...emptyFull, ...emptyFull]));
+
+		assert.strictEqual(entries.length, 0);
+	});
+
+	it('takes a format version written as a string, as the restore does', async () => {
 		const entries = await readBackupFile(
-			writeBackup([...full, header.replace('"id":"2"', '"id":"02"'), ...rest]),
+			writeBackup([
+				full[0]?.replace('"formatVersion":2', '"formatVersion":"2"') ?? '',
+				...full.slice(1),
+			]),
 		);
 
-		assert.strictEqual(entries.length, 5);
+		assert.strictEqual(entries.length, 3);
 	});
 
 	const cases: { name: string; lines: () => string[]; message: string }[] = [
@@ -306,6 +339,37 @@ describe('readBackupFile with a backup that the v2 API wrote', () => {
 			name: 'an increment that does not follow on the part before it',
 			lines: () => [...full, ...emptyIncrement],
 			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'a backup line whose format version is null',
+			lines: () => [
+				full[0]?.replace('"formatVersion":2', '"formatVersion":null') ?? '',
+				...full.slice(1),
+			],
+			message: 'line 1 has an unsupported backup format version: none',
+		},
+		{
+			name: 'an increment whose anchor has the ID but not the hash of the event before it',
+			lines: () => [
+				...full,
+				...withAnchor(increment, { id: '2', hash: `esdb:hash:v2:${'0'.repeat(64)}` }),
+			],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment whose anchor has an ID that is no integer',
+			lines: () => [...full, ...increment.map(line => line.replace('"id":"2"', '"id":"0x2"'))],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'an increment whose anchor has an ID that is no number at all',
+			lines: () => [...full, ...increment.map(line => line.replace('"id":"2"', '"id":"abc"'))],
+			message: 'line 8 begins an increment that does not follow on the part before it',
+		},
+		{
+			name: 'a part with a malformed anchor that follows on a full backup of an empty store',
+			lines: () => [...emptyFull, ...withAnchor(emptyFull, {})],
+			message: 'line 3 begins an increment that does not follow on the part before it',
 		},
 		{
 			name: 'a part that begins before the part before it ended',

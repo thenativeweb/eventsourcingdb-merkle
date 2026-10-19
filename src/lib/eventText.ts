@@ -1,3 +1,4 @@
+import { isObject } from './isObject.js';
 import { getCompactValue } from './rawJson.js';
 import type { CloudEvent } from './types.js';
 
@@ -7,10 +8,6 @@ export interface EventFromText {
 	originalDataString: string | undefined;
 }
 
-const isObject = (value: unknown): value is Record<string, unknown> => {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
-
 const isEvent = (value: unknown): value is CloudEvent & { hash?: unknown } => {
 	return isObject(value) && typeof value.specversion === 'string';
 };
@@ -19,11 +16,12 @@ const isEvent = (value: unknown): value is CloudEvent & { hash?: unknown } => {
 // a line of a backup of the v1 API, which holds the event and its hash side by
 // side, a line of read-events of the v1 API, which holds the event with its
 // hash, a line of a backup or of read-events of the v2 API, which holds the
-// event with its hash as data, or the event alone, with its hash or without. The data is taken from the text
-// rather than from what JSON.parse makes of it, since the hash covers it as
-// EventSourcingDB wrote it. Text in any other form gives undefined, a line
-// whose payload is neither of the two included, since a line carries no spec
-// version of its own and so is never taken for an event alone.
+// event with its hash as data, or the event alone, with its hash or without.
+// The data is taken from the text rather than from what JSON.parse makes of
+// it, since the hash covers it as EventSourcingDB wrote it. Text in any other
+// form gives undefined, a line whose event or hash is missing included, since
+// a line carries no spec version of its own and so is never taken for an event
+// alone.
 export const readEventText = (text: string): EventFromText | undefined => {
 	const parsed: unknown = JSON.parse(text);
 

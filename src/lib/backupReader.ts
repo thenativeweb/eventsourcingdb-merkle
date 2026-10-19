@@ -1,7 +1,8 @@
 import { createReadStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { getCompactValue } from './rawJson.js';
+import { isObject } from './isObject.js';
+import { getCompactValue, getRawValue } from './rawJson.js';
 import type { BackupEntry, CloudEvent } from './types.js';
 
 // A line of a backup, of either format: the v1 API writes a payload, the v2 API
@@ -30,11 +31,8 @@ interface AnchorEvent {
 // of the v1 API carry no version of their own.
 const backupFormatVersion = 2;
 
-const eventIdPattern = /^\d+$/u;
-
-const isObject = (value: unknown): value is Record<string, unknown> => {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
-};
+// An event ID is an integer, which EventSourcingDB reads with an optional sign.
+const eventIdPattern = /^[+-]?\d+$/u;
 
 export const readBackupFile = async (filePath: string): Promise<BackupEntry[]> => {
 	// Check if file exists and is readable
@@ -172,12 +170,22 @@ const createV2Reader = (): FormatReader => {
 			throw new Error(`line ${line.number} begins a part before the part before it ended`);
 		}
 
-		const { formatVersion, lastBackedUpEvent } = isObject(line.data) ? line.data : {};
+		const { lastBackedUpEvent } = isObject(line.data) ? line.data : {};
 		partIndex++;
 
-		if (formatVersion !== backupFormatVersion) {
+		// The restore reads the version as the text of a number, so it takes one
+		// in quotes as well, and counts null as a version that is left out.
+		const rawFormatVersion = getRawValue(line.text, ['data', 'formatVersion']);
+		const formatVersion =
+			rawFormatVersion === undefined || rawFormatVersion === 'null'
+				? undefined
+				: rawFormatVersion.startsWith('"')
+					? (JSON.parse(rawFormatVersion) as string)
+					: rawFormatVersion;
+
+		if (formatVersion !== String(backupFormatVersion)) {
 			throw new Error(
-				`line ${line.number} has an unsupported backup format version: ${formatVersion === undefined ? 'none' : JSON.stringify(formatVersion)}`,
+				`line ${line.number} has an unsupported backup format version: ${formatVersion ?? 'none'}`,
 			);
 		}
 
@@ -188,7 +196,7 @@ const createV2Reader = (): FormatReader => {
 				`line ${line.number} begins an increment, but a backup has to begin with a full backup`,
 			);
 		}
-		if (partIndex > 0 && !isSameEvent(readAnchorEvent(lastBackedUpEvent), endedAt)) {
+		if (partIndex > 0 && !isSameEvent(lastBackedUpEvent, endedAt)) {
 			throw new Error(
 				`line ${line.number} begins an increment that does not follow on the part before it`,
 			);
@@ -267,28 +275,30 @@ const createV2Reader = (): FormatReader => {
 	};
 };
 
-const readAnchorEvent = (value: unknown): AnchorEvent | undefined => {
-	if (!isObject(value) || typeof value.id !== 'string' || typeof value.hash !== 'string') {
-		return undefined;
+// isSameEvent tells whether the anchor that an increment names, as its backup
+// line holds it, is the event that the part before it ended at, by its ID as a
+// number, since creating a backup takes the ID in any notation that
+// EventSourcingDB reads, and by its hash. An anchor of null names no event, and
+// follows on a part that ended at none, such as a full backup of an empty store.
+// Any other anchor that does not name an event by its ID and hash follows on
+// nothing.
+const isSameEvent = (anchor: unknown, endedAt: AnchorEvent | undefined): boolean => {
+	if (anchor === null || anchor === undefined) {
+		return endedAt === undefined;
 	}
-
-	return { id: value.id, hash: value.hash };
-};
-
-// isSameEvent tells whether two anchors name the same event, by its ID as a
-// number, since creating a backup takes the ID in any notation of the number,
-// and by its hash. Two that name no event are the same, so that an increment
-// follows on a full backup of an empty store.
-const isSameEvent = (left: AnchorEvent | undefined, right: AnchorEvent | undefined): boolean => {
-	if (left === undefined || right === undefined) {
-		return left === undefined && right === undefined;
-	}
-
-	if (!eventIdPattern.test(left.id) || !eventIdPattern.test(right.id)) {
+	if (endedAt === undefined || !isObject(anchor)) {
 		return false;
 	}
 
-	return BigInt(left.id) === BigInt(right.id) && left.hash === right.hash;
+	const { id, hash } = anchor;
+	if (typeof id !== 'string' || typeof hash !== 'string') {
+		return false;
+	}
+	if (!eventIdPattern.test(id) || !eventIdPattern.test(endedAt.id)) {
+		return false;
+	}
+
+	return BigInt(id) === BigInt(endedAt.id) && hash === endedAt.hash;
 };
 
 export const findEventById = (entries: BackupEntry[], eventId: string): BackupEntry | undefined => {
