@@ -212,7 +212,12 @@ In both versions, the data is hashed as it appears in the backup or in the event
 
 The Merkle tree is constructed by treating event hashes, as they are stored, prefix included, as leaf nodes. Internal nodes are created by hashing the concatenation of their child hashes. If the number of nodes at any level is odd, the last node is duplicated to create a complete binary tree. This process continues until a single root hash remains.
 
-Backup files are expected to be in the NDJSON format that EventSourcingDB writes on `/api/v1/backup`, where each line contains a JSON object with a `type` and a `payload` field. A line of the type `event` holds a CloudEvents-compliant event and its hash. A line of the type `schema` holds the schema of an event type, which the tool skips, since neither the hashes nor the chain cover it. A backup that holds a line of the type `error` was cut short, and the tool refuses it, as it refuses a line of any other type or one that is not valid JSON, naming the line.
+Backup files are expected to be in one of the two NDJSON formats that EventSourcingDB writes, and the tool reads what a restore of EventSourcingDB takes. It checks the structure of a backup, the hashes, and the chain, but neither the values of the events nor the schemas, which a restore checks with the rules of the server:
+
+- A backup of the v1 API, which EventSourcingDB writes on `/api/v1/backup`, holds a JSON object with a `type` and a `payload` field on each line. A line of the type `event` holds a CloudEvents-compliant event and its hash. A line of the type `schema` holds the schema of an event type, which the tool skips, since neither the hashes nor the chain cover it.
+- A backup of the v2 API, which EventSourcingDB writes on `/api/v2/management/create-backup` from release 1.3 on, holds a JSON object with a `type` and a `data` field on each line. It begins with a line of the type `backup`, which names the version of its format, and ends with a line of the type `end`. An incremental backup follows on the last event of the backup before it. To verify one, append it to the full backup and the increments before it, in their order, as a restore takes them, for example with `cat full.ndjson increment-1.ndjson increment-2.ndjson`: across them, the chain is the ordinary chain of the events.
+
+A backup that holds a line of the type `error` was cut short, and the tool refuses it, as it refuses a line of any type that its format does not know, a line that is not valid JSON, and a backup of the v2 API whose structure a restore would refuse, naming the line.
 
 ## Running Quality Assurance
 
