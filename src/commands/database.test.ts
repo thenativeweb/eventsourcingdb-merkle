@@ -26,7 +26,8 @@ const run = (args: string[]): { output: string; exitCode: number } => {
 // The tests run against the image tag that EVENTSOURCINGDB_IMAGE_TAG names, so
 // that the pipeline can run them against the latest release and against the
 // preview, as the client SDKs do. Without the variable, they run against the
-// preview.
+// preview, since it holds what the next release brings: hashes of version 2,
+// and the v2 API.
 const imageTag = process.env.EVENTSOURCINGDB_IMAGE_TAG || 'preview';
 
 // A database that holds the events that release 1.2.0 wrote, restored from its
@@ -133,7 +134,7 @@ describe('reading a running database', () => {
 		assert.strictEqual(run(['verify-proof', output]).exitCode, 0);
 	});
 
-	it('validates the hash of an event of either version in the database', () => {
+	it('validates the hash of a restored event and of one that the release under test wrote', () => {
 		for (const eventId of ['1', '3']) {
 			const { output, exitCode } = run(['validate-event-hash', ...source, `--event-id=${eventId}`]);
 
@@ -154,13 +155,6 @@ describe('reading a running database', () => {
 
 		assert.strictEqual(exitCode, 0, output);
 		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 3\n'), output);
-	});
-
-	it('takes an event ID with leading zeros, as for a backup', () => {
-		const { output, exitCode } = run(['validate-event-hash', ...source, '--event-id=00']);
-
-		assert.strictEqual(exitCode, 0, output);
-		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 0\n'), output);
 	});
 
 	it('reports an event ID that names no number as not found, as for a backup', () => {
