@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { getRawValue } from './rawJson.js';
+import { getCompactValue } from './rawJson.js';
 import type { BackupEntry, CloudEvent } from './types.js';
 
 export const readBackupFile = async (filePath: string): Promise<BackupEntry[]> => {
@@ -93,7 +93,7 @@ const readEventLine = (line: string, payload: unknown, lineNumber: number): Back
 		payload: { event: event as CloudEvent, hash },
 	};
 
-	entry.payload.originalDataString = getRawValue(line, ['payload', 'event', 'data']);
+	entry.payload.originalDataString = getCompactValue(line, ['payload', 'event', 'data']);
 
 	return entry;
 };

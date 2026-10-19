@@ -5,6 +5,38 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
 
+// formatLine adds whitespace between the tokens of a line, as a viewer or jq
+// without -c does, and keeps what is inside strings, escape sequences included.
+const formatLine = (line: string): string => {
+	let formatted = '';
+	let isInString = false;
+
+	for (let index = 0; index < line.length; index++) {
+		const character = line[index];
+		formatted += character;
+
+		if (isInString) {
+			if (character === '\\') {
+				index++;
+				formatted += line[index];
+			} else if (character === '"') {
+				isInString = false;
+			}
+			continue;
+		}
+
+		if (character === '"') {
+			isInString = true;
+		} else if (character === '{' || character === '[' || character === ',') {
+			formatted += '\n  ';
+		} else if (character === ':') {
+			formatted += ' ';
+		}
+	}
+
+	return formatted;
+};
+
 describe('validate-event-hash', () => {
 	const testDir = join(tmpdir(), 'esdb-test');
 	const testBackup = `${testDir}/event-hash-test.json`;
@@ -114,7 +146,7 @@ describe('validate-event-hash', () => {
 		);
 	});
 
-	describe('with data that JSON.stringify writes differently', () => {
+	describe('with data that holds braces inside strings, or characters that EventSourcingDB escapes', () => {
 		const backupLines = readFileSync('test-fixtures/backup-with-tricky-data.ndjson', 'utf-8')
 			.trimEnd()
 			.split('\n');
@@ -124,6 +156,20 @@ describe('validate-event-hash', () => {
 				const output = execFileSync(
 					'node',
 					['./dist/index.js', 'validate-event-hash', `--event=${line}`],
+					{ encoding: 'utf-8' },
+				);
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				assert.match(output, /✓ Hash is valid/);
+			});
+
+			it(`validates the hash of event ${index} given as a formatted line of a backup`, () => {
+				const formattedLine = formatLine(line);
+				assert.notStrictEqual(formattedLine, line);
+				assert.deepStrictEqual(JSON.parse(formattedLine), JSON.parse(line));
+
+				const output = execFileSync(
+					'node',
+					['./dist/index.js', 'validate-event-hash', `--event=${formattedLine}`],
 					{ encoding: 'utf-8' },
 				);
 				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files

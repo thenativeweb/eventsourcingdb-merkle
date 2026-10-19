@@ -24,6 +24,37 @@ export const getRawValue = (json: string, path: string[]): string | undefined =>
 	return json.slice(start, end);
 };
 
+// getCompactValue returns the value as getRawValue does, without the whitespace
+// between its tokens. EventSourcingDB writes data compactly, so this is the text
+// it wrote, also where the text was formatted afterwards, as a viewer or jq
+// without -c does, while escape sequences and the notation of numbers stay as
+// they are.
+export const getCompactValue = (json: string, path: string[]): string | undefined => {
+	const value = getRawValue(json, path);
+	if (value === undefined) {
+		return undefined;
+	}
+
+	let compactValue = '';
+	let position = 0;
+
+	while (position < value.length) {
+		if (value[position] === '"') {
+			const end = getEndOfString(value, position);
+			compactValue += value.slice(position, end);
+			position = end;
+			continue;
+		}
+
+		if (!whitespace.has(value[position] ?? '')) {
+			compactValue += value[position];
+		}
+		position++;
+	}
+
+	return compactValue;
+};
+
 // findMember returns where the value of the member with the given key begins
 // and ends, in the object that begins at the given position. Of several members
 // with the same key, it takes the last one, as JSON.parse does.

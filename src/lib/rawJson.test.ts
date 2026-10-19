@@ -1,6 +1,6 @@
 import assert from 'node:assert';
 import { describe, it } from 'node:test';
-import { getRawValue } from './rawJson.js';
+import { getCompactValue, getRawValue } from './rawJson.js';
 
 describe('getRawValue', () => {
 	it('returns a value exactly as it appears in the text', () => {
@@ -75,5 +75,29 @@ describe('getRawValue', () => {
 		assert.strictEqual(getRawValue(json, ['list', 'a']), undefined);
 		assert.strictEqual(getRawValue(json, ['text', 'a']), undefined);
 		assert.strictEqual(getRawValue('[1]', ['data']), undefined);
+	});
+});
+
+describe('getCompactValue', () => {
+	it('leaves out the whitespace between tokens, but keeps the whitespace inside strings', () => {
+		const json = '{ "data" : {\n  "title" : "Tom \\u0026  Jerry",\n\t"list" : [ 1 , 2 ]\r\n} }';
+
+		assert.strictEqual(
+			getCompactValue(json, ['data']),
+			'{"title":"Tom \\u0026  Jerry","list":[1,2]}',
+		);
+	});
+
+	it('keeps the notation of numbers and escaped quotes', () => {
+		const json = '{"data": {"pages": 1e+21, "quote": "say \\" hi \\" "}}';
+
+		assert.strictEqual(
+			getCompactValue(json, ['data']),
+			'{"pages":1e+21,"quote":"say \\" hi \\" "}',
+		);
+	});
+
+	it('returns undefined for a member that is missing', () => {
+		assert.strictEqual(getCompactValue('{"a":1}', ['data']), undefined);
 	});
 });

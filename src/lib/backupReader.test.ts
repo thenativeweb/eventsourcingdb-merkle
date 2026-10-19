@@ -187,7 +187,7 @@ describe('readBackupFile with lines other than events', () => {
 	});
 });
 
-describe('readBackupFile with data that JSON.stringify writes differently', () => {
+describe('readBackupFile with data that holds braces inside strings, or characters that EventSourcingDB escapes', () => {
 	// A backup that EventSourcingDB 1.2.0 wrote, whose data holds braces,
 	// brackets, quotes, and backslashes inside strings, characters that it
 	// escapes, and characters beyond ASCII.
