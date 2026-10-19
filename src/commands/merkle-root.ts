@@ -2,8 +2,9 @@ import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { describeError } from '../lib/describeError.js';
 import { parseEventId } from '../lib/eventId.js';
-import { buildMerkleRoot } from '../lib/merkleTree.js';
+import { calculateMerkleRoot } from '../lib/merkleTree.js';
 import { getSource, readEvents, sourceFlags } from '../lib/source.js';
+import { getTree, getTreeFlags, readTreeOptions } from '../lib/tree.js';
 
 export default class MerkleRoot extends BaseCommand {
 	static override description =
@@ -12,6 +13,8 @@ export default class MerkleRoot extends BaseCommand {
 	static override examples = [
 		'<%= config.bin %> <%= command.id %> --backup=backup.json',
 		'<%= config.bin %> <%= command.id %> --backup=/path/to/backup.json --last-event-id=41',
+		'<%= config.bin %> <%= command.id %> --backup=backup.json --salt-key-file=merkle.key',
+		'<%= config.bin %> <%= command.id %> --backup=backup.json --tree-version=1',
 		'<%= config.bin %> <%= command.id %> --esdb-url=http://localhost:3000 --esdb-api-token="$ESDB_API_TOKEN"',
 	];
 
@@ -20,6 +23,7 @@ export default class MerkleRoot extends BaseCommand {
 		'last-event-id': Flags.string({
 			description: 'ID of the last event to cover, to calculate the root of an earlier state again',
 		}),
+		...getTreeFlags('Version of the Merkle tree: 1 for roots that releases before 3.0 calculated'),
 	};
 
 	static override args = {};
@@ -39,10 +43,17 @@ export default class MerkleRoot extends BaseCommand {
 			return;
 		}
 
+		const tree = getTree(flags);
+		if ('refusal' in tree) {
+			this.refuseCall(tree.refusal);
+			return;
+		}
+
 		try {
+			const treeOptions = await readTreeOptions(tree);
 			const events = await readEvents(source, { lastEventId });
 			const hashes = events.map(event => event.hash);
-			const merkleRoot = buildMerkleRoot(hashes);
+			const merkleRoot = calculateMerkleRoot(hashes, treeOptions);
 
 			// The ID of the last event is what calculates this root again later,
 			// from a source that has grown since.

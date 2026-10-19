@@ -1,6 +1,6 @@
 import { Args } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
-import { verifyMerkleProof } from '../lib/merkleTree.js';
+import { findProofStructureProblem, verifyMerkleProof } from '../lib/merkleTree.js';
 import type { MerkleProof } from '../lib/types.js';
 
 export default class VerifyProof extends BaseCommand {
@@ -34,10 +34,10 @@ export default class VerifyProof extends BaseCommand {
 				proof = JSON.parse(fileContent) as MerkleProof;
 			}
 
-			// Validate proof structure
-			if (!proof.eventHash || !proof.merkleRoot || !proof.siblingHashes) {
+			const structureProblem = findProofStructureProblem(proof);
+			if (structureProblem !== undefined) {
 				this.log('✗ Invalid proof structure');
-				this.log('Must contain eventHash, merkleRoot, and siblingHashes');
+				this.log(structureProblem);
 				process.exitCode = 1;
 				return;
 			}

@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { execFileSync, execSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { before, describe, it } from 'node:test';
@@ -191,6 +192,154 @@ describe('get-proof', () => {
 			assert.strictEqual(
 				output,
 				'✗ --event-id is required when using --backup or --esdb-url\nSee more help with --help\n',
+			);
+		});
+	});
+
+	describe('in either version of the tree', () => {
+		const backup = '--backup=test-fixtures/backup-with-both-hash-versions.ndjson';
+		const keyDigits = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
+		const keyFile = join(mkdtempSync(join(tmpdir(), 'esdb-merkle-')), 'merkle.key');
+		writeFileSync(keyFile, `${keyDigits}\n`);
+
+		const run = (command: string, args: string[]): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync('node', ['./dist/index.js', command, ...args], {
+						encoding: 'utf-8',
+					}),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		interface Proof {
+			eventId: string;
+			eventHash: string;
+			salt?: string;
+			siblingHashes: { hash: string; position: string }[];
+			merkleRoot: string;
+		}
+
+		const formatProof = (proof: Proof): string =>
+			[
+				`Merkle Proof for Event ${proof.eventId}`,
+				'',
+				`Event Hash: ${proof.eventHash}`,
+				...(proof.salt === undefined ? [] : [`Salt: ${proof.salt}`]),
+				`Merkle Root: ${proof.merkleRoot}`,
+				'',
+				`Sibling Hashes (${proof.siblingHashes.length}):`,
+				...proof.siblingHashes.map(
+					({ hash, position }, index) => `  ${index + 1}. ${hash} (${position})`,
+				),
+				'',
+			].join('\n');
+
+		it('proves an event with its salt against the root that the same key salted', () => {
+			const salted = [backup, `--salt-key-file=${keyFile}`];
+			const root = run('merkle-root', salted).output.split('\n')[0];
+			const { output, exitCode } = run('get-proof', [...salted, '--event-id=2', '--json']);
+			assert.strictEqual(exitCode, 0, output);
+			const proof = JSON.parse(output) as Proof;
+
+			assert.deepStrictEqual(Object.keys(proof), [
+				'eventId',
+				'eventHash',
+				'salt',
+				'siblingHashes',
+				'merkleRoot',
+			]);
+			assert.strictEqual(
+				proof.salt,
+				createHmac('sha256', Buffer.from(keyDigits, 'hex')).update(proof.eventHash).digest('hex'),
+			);
+			assert.strictEqual(`Merkle Root: ${proof.merkleRoot}`, root);
+			assert.deepStrictEqual(run('verify-proof', [output]), {
+				output: `✓ Merkle proof is valid\nEvent ID: 2\nEvent Hash: ${proof.eventHash}\nMerkle Root: ${proof.merkleRoot}\n`,
+				exitCode: 0,
+			});
+		});
+
+		it('shows the salt right after the hash of the event', () => {
+			const salted = [backup, `--salt-key-file=${keyFile}`, '--event-id=2'];
+			const proof = JSON.parse(run('get-proof', [...salted, '--json']).output) as Proof;
+
+			assert.deepStrictEqual(run('get-proof', salted), { output: formatProof(proof), exitCode: 0 });
+		});
+
+		it('shows no salt where the leaves are not salted', () => {
+			const proof = JSON.parse(
+				run('get-proof', [backup, '--event-id=2', '--json']).output,
+			) as Proof;
+
+			assert.strictEqual(proof.salt, undefined);
+			assert.deepStrictEqual(run('get-proof', [backup, '--event-id=2']), {
+				output: formatProof(proof),
+				exitCode: 0,
+			});
+		});
+
+		it('proves an event against the root of version 1', () => {
+			const root = run('merkle-root', [backup, '--tree-version=1']).output.split('\n')[0];
+			const { output, exitCode } = run('get-proof', [
+				backup,
+				'--event-id=2',
+				'--tree-version=1',
+				'--json',
+			]);
+			assert.strictEqual(exitCode, 0, output);
+			const proof = JSON.parse(output) as Proof;
+
+			assert.strictEqual(proof.salt, undefined);
+			assert.strictEqual(`Merkle Root: ${proof.merkleRoot}`, root);
+			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
+		});
+
+		it('refuses a salt key file for the tree of version 1', () => {
+			assert.deepStrictEqual(
+				run('get-proof', [
+					backup,
+					'--event-id=2',
+					'--tree-version=1',
+					`--salt-key-file=${keyFile}`,
+				]),
+				{
+					output:
+						'✗ --salt-key-file and --tree-version=1 cannot be used together\nSee more help with --help\n',
+					exitCode: 2,
+				},
+			);
+		});
+
+		it('reports a salt key file that does not exist', () => {
+			const missingKeyFile = join(tmpdir(), 'esdb-merkle-missing.key');
+
+			assert.deepStrictEqual(
+				run('get-proof', [backup, '--event-id=2', `--salt-key-file=${missingKeyFile}`]),
+				{
+					output: `✗ Failed to generate Merkle proof: File not found: ${missingKeyFile}\n`,
+					exitCode: 1,
+				},
+			);
+		});
+
+		it('describes the flags of the tree in its help', () => {
+			// The help wraps long descriptions, wherever the width of the terminal ends.
+			const output = run('get-proof', ['--help']).output.replace(/\s+/gu, ' ');
+
+			assert.ok(
+				output.includes('File with the salt key to salt the leaves of the tree with'),
+				output,
+			);
+			assert.ok(
+				output.includes(
+					'Version of the Merkle tree: 1 to prove against roots that releases before 3.0 calculated',
+				),
+				output,
 			);
 		});
 	});
