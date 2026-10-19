@@ -6,9 +6,8 @@ import { parseEventId } from './eventId.js';
 // or only the given event. The SDK reads the v2 API where the server offers it,
 // whose stream ends with an end item, so that a read cut short fails rather
 // than passing as complete; against a server that offers only the v1 API, it
-// cannot tell the two apart. An ID goes to the server as the number it names,
-// in the notation the server writes, so that every notation reads the same
-// event on every server, as it does for a backup.
+// cannot tell the two apart. EventSourcingDB reads an ID in any notation of
+// its number, as the tool does for a backup.
 export const readDatabase = async (
 	url: string,
 	apiToken: string,
@@ -16,20 +15,16 @@ export const readDatabase = async (
 ): Promise<Event[]> => {
 	const options: ReadEventsOptions = { recursive: true };
 	if (eventId !== undefined) {
-		const id = parseEventId(eventId);
-		if (id === undefined) {
+		// An ID that names no number names no event, as for a backup, rather than
+		// a request that the server refuses.
+		if (parseEventId(eventId) === undefined) {
 			return [];
 		}
 
-		options.lowerBound = { id: id.toString(), type: 'inclusive' };
-		options.upperBound = { id: id.toString(), type: 'inclusive' };
+		options.lowerBound = { id: eventId, type: 'inclusive' };
+		options.upperBound = { id: eventId, type: 'inclusive' };
 	} else if (lastEventId !== undefined) {
-		const id = parseEventId(lastEventId);
-		if (id === undefined) {
-			return [];
-		}
-
-		options.upperBound = { id: id.toString(), type: 'inclusive' };
+		options.upperBound = { id: lastEventId, type: 'inclusive' };
 	}
 
 	const client = new Client(new URL(url), apiToken);
