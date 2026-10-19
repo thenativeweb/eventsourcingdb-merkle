@@ -2,7 +2,11 @@ import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { findEventById, readBackupFile } from '../lib/backupReader.js';
 import { readEventText } from '../lib/eventText.js';
-import { calculateEventHash, UnsupportedHashVersionError } from '../lib/hash.js';
+import {
+	calculateEventHash,
+	calculateEventHashInEveryVersion,
+	UnsupportedHashVersionError,
+} from '../lib/hash.js';
 import type { CloudEvent } from '../lib/types.js';
 
 export default class ValidateEventHash extends BaseCommand {
@@ -10,20 +14,20 @@ export default class ValidateEventHash extends BaseCommand {
 		'Validate the hash of a specific event (with or without backup file)';
 
 	static override examples = [
-		'<%= config.bin %> <%= command.id %> --file=backup.json --event-id=42',
+		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42',
 		// biome-ignore lint/security/noSecrets: This is an example command, not a secret
 		'<%= config.bin %> <%= command.id %> --event=\'{"specversion":"1.0",...}\'',
 	];
 
 	static override flags = {
-		file: Flags.string({ description: 'Path to the backup file', exclusive: ['event'] }),
+		backup: Flags.string({ description: 'Path to the backup file', exclusive: ['event'] }),
 		'event-id': Flags.string({
-			description: 'Event ID to validate (requires --file)',
+			description: 'Event ID to validate (requires --backup)',
 			exclusive: ['event'],
 		}),
 		event: Flags.string({
 			description: 'JSON string of the event to validate',
-			exclusive: ['file', 'event-id'],
+			exclusive: ['backup', 'event-id'],
 		}),
 	};
 
@@ -32,21 +36,17 @@ export default class ValidateEventHash extends BaseCommand {
 	public async run(): Promise<void> {
 		const { flags } = await this.parse(ValidateEventHash);
 
-		if (!flags.file && !flags.event) {
-			this.log('✗ Either --file and --event-id, or --event must be provided');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+		if (!flags.backup && !flags.event) {
+			this.refuseCall('Either --backup with --event-id, or --event must be provided');
 			return;
 		}
 
-		if (flags.file && !flags['event-id']) {
-			this.log('✗ --event-id is required when using --file');
-			this.log('See more help with --help');
-			process.exitCode = 2;
+		if (flags.backup && !flags['event-id']) {
+			this.refuseCall('--event-id is required when using --backup');
 			return;
 		}
 
-		const filePath = flags.file;
+		const filePath = flags.backup;
 		const eventId = flags['event-id'];
 
 		try {
@@ -58,19 +58,19 @@ export default class ValidateEventHash extends BaseCommand {
 				const eventFromText = readEventText(flags.event);
 
 				if (eventFromText === undefined) {
-					this.log('✗ --event is neither an event nor a line of a backup or of read-events');
-					this.log('See more help with --help');
-					process.exitCode = 2;
+					this.refuseCall('--event is neither an event nor a line of a backup or of read-events');
 					return;
 				}
 
+				// Without a stored hash, nothing tells which version of the hash is
+				// meant, so it is calculated in every version.
 				if (eventFromText.storedHash === undefined) {
-					// No stored hash to compare against
-					const calculatedHash = calculateEventHash(
+					for (const { version, hash } of calculateEventHashInEveryVersion(
 						eventFromText.event,
 						eventFromText.originalDataString,
-					);
-					this.log(`Calculated hash: ${calculatedHash}`);
+					)) {
+						this.log(`Calculated hash (version ${version}): ${hash}`);
+					}
 					return;
 				}
 

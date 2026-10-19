@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
+import { parseEventId } from './eventId.js';
 import { isObject } from './isObject.js';
 import { getCompactValue, getRawValue } from './rawJson.js';
 import type { BackupEntry, CloudEvent } from './types.js';
@@ -30,9 +31,6 @@ interface AnchorEvent {
 // The version of the format in which the v2 API writes a backup. The backups
 // of the v1 API carry no version of their own.
 const backupFormatVersion = 2;
-
-// An event ID is an integer, which EventSourcingDB reads with an optional sign.
-const eventIdPattern = /^[+-]?\d+$/u;
 
 export const readBackupFile = async (filePath: string): Promise<BackupEntry[]> => {
 	// Check if file exists and is readable
@@ -294,13 +292,18 @@ const isSameEvent = (anchor: unknown, endedAt: AnchorEvent | undefined): boolean
 	if (typeof id !== 'string' || typeof hash !== 'string') {
 		return false;
 	}
-	if (!eventIdPattern.test(id) || !eventIdPattern.test(endedAt.id)) {
-		return false;
-	}
+	const anchorId = parseEventId(id);
 
-	return BigInt(id) === BigInt(endedAt.id) && hash === endedAt.hash;
+	return anchorId !== undefined && anchorId === parseEventId(endedAt.id) && hash === endedAt.hash;
 };
 
+// findEventById compares IDs as numbers, as EventSourcingDB reads them, so that
+// an ID in another notation of the same number finds the event.
 export const findEventById = (entries: BackupEntry[], eventId: string): BackupEntry | undefined => {
-	return entries.find(entry => entry.payload.event.id === eventId);
+	const wanted = parseEventId(eventId);
+	if (wanted === undefined) {
+		return undefined;
+	}
+
+	return entries.find(entry => parseEventId(entry.payload.event.id) === wanted);
 };

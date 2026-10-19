@@ -51,18 +51,19 @@ const calculateEventHashOfVersion2 = (event: CloudEvent, dataString: string): st
 
 // calculateEventHash computes the hash of an event in the version that its
 // stored hash names, since an event keeps the version of the hash it was
-// written with, or in version 1 without a stored hash to go by. A stored hash
+// written with. An event without a stored hash names no version, which is what
+// calculateEventHashInEveryVersion is for. A stored hash
 // whose prefix names a version that the tool does not know cannot be verified,
 // which is not the same as being tampered with, so it is refused rather than
 // computed in another version that could only fail to match.
 export const calculateEventHash = (
 	event: CloudEvent,
-	originalDataString?: string,
-	storedHash?: string,
+	originalDataString: string | undefined,
+	storedHash: string,
 ): string => {
 	const dataString = originalDataString ?? JSON.stringify(event.data);
 
-	if (storedHash === undefined || !storedHash.startsWith(hashPrefix)) {
+	if (!storedHash.startsWith(hashPrefix)) {
 		return calculateEventHashOfVersion1(event, dataString);
 	}
 	if (storedHash.startsWith(hashVersion2Prefix)) {
@@ -71,6 +72,21 @@ export const calculateEventHash = (
 
 	const [version = ''] = storedHash.slice(hashPrefix.length).split(':');
 	throw new UnsupportedHashVersionError(version);
+};
+
+// calculateEventHashInEveryVersion computes the hash of an event in every
+// version the tool knows, for an event without a stored hash that would tell
+// which version is meant.
+export const calculateEventHashInEveryVersion = (
+	event: CloudEvent,
+	originalDataString?: string,
+): { version: number; hash: string }[] => {
+	const dataString = originalDataString ?? JSON.stringify(event.data);
+
+	return [
+		{ version: 1, hash: calculateEventHashOfVersion1(event, dataString) },
+		{ version: 2, hash: calculateEventHashOfVersion2(event, dataString) },
+	];
 };
 
 export const hashPair = (left: string, right: string): string => {

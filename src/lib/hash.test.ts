@@ -36,10 +36,11 @@ describe('calculateEventHash', () => {
 			},
 		};
 
-		const hash = calculateEventHash(event);
-
 		// biome-ignore lint/security/noSecrets: This is a SHA256 hash for testing
-		assert.strictEqual(hash, 'a5137d458a5639ee5d1f1248559058b2dfc25c98c8731aefc3efbf9decb5dbeb');
+		const storedHash = 'a5137d458a5639ee5d1f1248559058b2dfc25c98c8731aefc3efbf9decb5dbeb';
+		const hash = calculateEventHash(event, undefined, storedHash);
+
+		assert.strictEqual(hash, storedHash);
 	});
 });
 

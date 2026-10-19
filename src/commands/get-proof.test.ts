@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,7 +53,7 @@ describe('get-proof', () => {
 	});
 
 	it('generates proof for event', () => {
-		const output = execSync(`node ./dist/index.js get-proof ${testBackup} 0`, {
+		const output = execSync(`node ./dist/index.js get-proof --backup=${testBackup} --event-id=0`, {
 			encoding: 'utf-8',
 		});
 		// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
@@ -65,9 +65,12 @@ describe('get-proof', () => {
 	});
 
 	it('outputs proof as JSON', () => {
-		const output = execSync(`node ./dist/index.js get-proof ${testBackup} 0 --json`, {
-			encoding: 'utf-8',
-		});
+		const output = execSync(
+			`node ./dist/index.js get-proof --backup=${testBackup} --event-id=0 --json`,
+			{
+				encoding: 'utf-8',
+			},
+		);
 		const parsed = JSON.parse(output.trim());
 		assert.strictEqual(parsed.eventId, '0');
 		assert.ok(parsed.eventHash);
@@ -78,7 +81,7 @@ describe('get-proof', () => {
 	it('handles non-existent event ID', () => {
 		assert.throws(
 			() => {
-				execSync(`node ./dist/index.js get-proof ${testBackup} 999`, {
+				execSync(`node ./dist/index.js get-proof --backup=${testBackup} --event-id=999`, {
 					encoding: 'utf-8',
 				});
 			},
@@ -91,17 +94,101 @@ describe('get-proof', () => {
 		);
 	});
 
-	it('shows error when arguments are missing', () => {
+	it('shows error when the backup is missing', () => {
 		try {
 			execSync('node ./dist/index.js get-proof', {
 				encoding: 'utf-8',
 			});
 			assert.fail('Expected command to fail');
 		} catch (error: unknown) {
-			const err = error as Error & { stdout?: string; stderr?: string };
-			const output = err.stdout || '';
-			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-			assert.match(output, /Missing 2 required args/);
+			const err = error as Error & { stdout?: string; status?: number };
+			assert.strictEqual(err.stdout, '✗ --backup must be provided\nSee more help with --help\n');
+			assert.strictEqual(err.status, 2);
 		}
+	});
+
+	describe('with a last event ID', () => {
+		const backup = '--backup=test-fixtures/backup-with-both-hash-versions.ndjson';
+		const run = (command: string, args: string[]): { output: string; exitCode: number } => {
+			try {
+				return {
+					output: execFileSync('node', ['./dist/index.js', command, ...args], {
+						encoding: 'utf-8',
+					}),
+					exitCode: 0,
+				};
+			} catch (error: unknown) {
+				const { stdout, status } = error as { stdout: string; status: number };
+				return { output: stdout, exitCode: status };
+			}
+		};
+
+		it('proves an event against the root up to the last event ID', () => {
+			const root = run('merkle-root', [backup, '--last-event-id=1']).output.split('\n')[0];
+			const { output, exitCode } = run('get-proof', [
+				backup,
+				'--event-id=0',
+				'--last-event-id=1',
+				'--json',
+			]);
+			assert.strictEqual(exitCode, 0, output);
+			const proof = JSON.parse(output) as { merkleRoot: string };
+
+			assert.strictEqual(`Merkle Root: ${proof.merkleRoot}`, root);
+			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
+		});
+
+		it('takes an event ID in another notation of the same number, as EventSourcingDB does', () => {
+			const { output, exitCode } = run('get-proof', [
+				backup,
+				'--event-id=01',
+				'--last-event-id=1',
+				'--json',
+			]);
+
+			assert.strictEqual(exitCode, 0, output);
+			assert.strictEqual((JSON.parse(output) as { eventId: string }).eventId, '1');
+		});
+
+		it('refuses a last event ID that is no event ID', () => {
+			const { output, exitCode } = run('get-proof', [
+				backup,
+				'--event-id=0',
+				'--last-event-id=abc',
+			]);
+
+			assert.strictEqual(exitCode, 2);
+			assert.strictEqual(
+				output,
+				"✗ --last-event-id has to be an event ID, but is 'abc'\nSee more help with --help\n",
+			);
+		});
+
+		it('refuses an event beyond the last event ID', () => {
+			const { output, exitCode } = run('get-proof', [backup, '--event-id=3', '--last-event-id=1']);
+
+			assert.strictEqual(exitCode, 1);
+			assert.strictEqual(output, '✗ Event 3 lies beyond the last event ID 1\n');
+		});
+
+		it('refuses a last event ID that the backup does not hold', () => {
+			const { output, exitCode } = run('get-proof', [backup, '--event-id=0', '--last-event-id=9']);
+
+			assert.strictEqual(exitCode, 1);
+			assert.strictEqual(
+				output,
+				'✗ Failed to generate Merkle proof: the backup holds no event with ID 9\n',
+			);
+		});
+
+		it('shows error when the event ID is missing', () => {
+			const { output, exitCode } = run('get-proof', [backup]);
+
+			assert.strictEqual(exitCode, 2);
+			assert.strictEqual(
+				output,
+				'✗ --event-id is required when using --backup\nSee more help with --help\n',
+			);
+		});
 	});
 });

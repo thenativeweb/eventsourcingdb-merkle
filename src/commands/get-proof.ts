@@ -1,6 +1,8 @@
-import { Args, Flags } from '@oclif/core';
+import { Flags } from '@oclif/core';
 import BaseCommand from '../lib/BaseCommand.js';
 import { findEventById, readBackupFile } from '../lib/backupReader.js';
+import { parseEventId } from '../lib/eventId.js';
+import { takeEntriesUpTo } from '../lib/lastEventId.js';
 import { generateMerkleProof } from '../lib/merkleTree.js';
 import type { MerkleProof } from '../lib/types.js';
 
@@ -8,28 +10,66 @@ export default class GetProof extends BaseCommand {
 	static override description = 'Generate a Merkle proof for a specific event';
 
 	static override examples = [
-		'<%= config.bin %> <%= command.id %> backup.json 42',
-		'<%= config.bin %> <%= command.id %> /path/to/backup.json 0 --json',
+		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42',
+		'<%= config.bin %> <%= command.id %> --backup=/path/to/backup.json --event-id=0 --json',
+		'<%= config.bin %> <%= command.id %> --backup=backup.json --event-id=42 --last-event-id=1234566',
 	];
 
-	static override args = {
-		file: Args.string({ description: 'Path to the backup file', required: true }),
-		'event-id': Args.string({ description: 'Event ID to generate proof for', required: true }),
-	};
-
 	static override flags = {
+		backup: Flags.string({ description: 'Path to the backup file' }),
+		'event-id': Flags.string({ description: 'Event ID to generate proof for' }),
+		'last-event-id': Flags.string({
+			description:
+				'ID of the last event the root covers, to prove against the root of an earlier state',
+		}),
 		json: Flags.boolean({ description: 'Output proof as JSON' }),
 	};
 
+	static override args = {};
+
 	public async run(): Promise<void> {
-		const { args, flags } = await this.parse(GetProof);
+		const { flags } = await this.parse(GetProof);
+
+		if (!flags.backup) {
+			this.refuseCall('--backup must be provided');
+			return;
+		}
+
+		const eventId = flags['event-id'];
+		if (!eventId) {
+			this.refuseCall('--event-id is required when using --backup');
+			return;
+		}
+
+		const lastEventId = flags['last-event-id'];
+		if (lastEventId !== undefined && parseEventId(lastEventId) === undefined) {
+			this.refuseCall(`--last-event-id has to be an event ID, but is '${lastEventId}'`);
+			return;
+		}
 
 		try {
-			const entries = await readBackupFile(args.file);
-			const entry = findEventById(entries, args['event-id']);
+			const allEntries = await readBackupFile(flags.backup);
+			const entries =
+				lastEventId === undefined ? allEntries : takeEntriesUpTo(allEntries, lastEventId);
+
+			// An event after the last one is not part of the tree, so it has no
+			// proof against its root, although the backup holds it.
+			const eventNumber = parseEventId(eventId);
+			const lastEventNumber = lastEventId === undefined ? undefined : parseEventId(lastEventId);
+			if (
+				eventNumber !== undefined &&
+				lastEventNumber !== undefined &&
+				eventNumber > lastEventNumber
+			) {
+				this.log(`✗ Event ${eventId} lies beyond the last event ID ${lastEventId}`);
+				process.exitCode = 1;
+				return;
+			}
+
+			const entry = findEventById(entries, eventId);
 
 			if (!entry) {
-				this.log(`✗ Event with ID ${args['event-id']} not found`);
+				this.log(`✗ Event with ID ${eventId} not found`);
 				process.exitCode = 1;
 				return;
 			}
