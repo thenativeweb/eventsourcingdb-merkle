@@ -228,21 +228,21 @@ describe('validate-event-hash', () => {
 
 		it('refuses a backup together with an event', () => {
 			const [line = ''] = readEventsLines;
-			try {
-				execFileSync(
-					'node',
-					[
-						'./dist/index.js',
-						'validate-event-hash',
-						'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
-						`--event=${line}`,
-					],
-					{ encoding: 'utf-8', stdio: 'pipe' },
-				);
-				assert.fail('Expected command to fail');
-			} catch (error: unknown) {
-				assert.strictEqual((error as { status?: number }).status, 2);
-			}
+			assert.throws(
+				() => {
+					execFileSync(
+						'node',
+						[
+							'./dist/index.js',
+							'validate-event-hash',
+							'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
+							`--event=${line}`,
+						],
+						{ encoding: 'utf-8', stdio: 'pipe' },
+					);
+				},
+				{ status: 2 },
+			);
 		});
 
 		it('takes an event ID in another notation of the same number, as EventSourcingDB does', () => {

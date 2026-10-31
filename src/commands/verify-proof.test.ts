@@ -92,17 +92,17 @@ describe('verify-proof', () => {
 	});
 
 	it('shows error when proof argument is missing', () => {
-		try {
-			execSync('node ./dist/index.js verify-proof', {
-				encoding: 'utf-8',
-			});
-			assert.fail('Expected command to fail');
-		} catch (error: unknown) {
-			const err = error as Error & { stdout?: string; stderr?: string };
-			const output = err.stdout || '';
-			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-			assert.match(output, /Missing 1 required arg/);
-		}
+		assert.throws(
+			() => {
+				execSync('node ./dist/index.js verify-proof', {
+					encoding: 'utf-8',
+				});
+			},
+			{
+				// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
+				stdout: /Missing 1 required arg/,
+			},
+		);
 	});
 
 	describe('in every version of the tree', () => {
