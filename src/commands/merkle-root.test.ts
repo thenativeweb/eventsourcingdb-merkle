@@ -150,19 +150,17 @@ describe('merkle-root', () => {
 	});
 
 	it('shows error when the backup is missing', () => {
-		try {
-			execSync('node ./dist/index.js merkle-root', {
-				encoding: 'utf-8',
-			});
-			assert.fail('Expected command to fail');
-		} catch (error: unknown) {
-			const err = error as Error & { stdout?: string; status?: number };
-			assert.strictEqual(
-				err.stdout,
-				'✗ Either --backup or --esdb-url must be provided\nSee more help with --help\n',
-			);
-			assert.strictEqual(err.status, 2);
-		}
+		assert.throws(
+			() => {
+				execSync('node ./dist/index.js merkle-root', {
+					encoding: 'utf-8',
+				});
+			},
+			{
+				status: 2,
+				stdout: '✗ Either --backup or --esdb-url must be provided\nSee more help with --help\n',
+			},
+		);
 	});
 
 	it('calculates the Merkle root of a backup of a store with a registered schema', () => {
