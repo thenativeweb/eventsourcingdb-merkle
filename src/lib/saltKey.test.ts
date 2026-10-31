@@ -109,12 +109,12 @@ describe('writeSaltKey', () => {
 		await assert.rejects(writeSaltKey(filePath), { code: 'ENOENT' });
 	});
 
-	it('flushes the key to the disk before it returns', async test => {
+	it('flushes the key to the disk before it returns', async context => {
 		const filePath = getTemporaryPath('merkle.key');
 		const prototype = await getFileHandlePrototype();
 		const syncedTexts: string[] = [];
 		const { sync } = prototype;
-		test.mock.method(prototype, 'sync', async function (this: FileHandle) {
+		context.mock.method(prototype, 'sync', async function (this: FileHandle) {
 			syncedTexts.push(readFileSync(filePath, 'utf-8'));
 			await sync.call(this);
 		});
@@ -124,9 +124,9 @@ describe('writeSaltKey', () => {
 		assert.deepStrictEqual(syncedTexts, [readFileSync(filePath, 'utf-8')]);
 	});
 
-	it('removes a key that it could not write completely', async test => {
+	it('removes a key that it could not write completely', async context => {
 		const filePath = getTemporaryPath('merkle.key');
-		test.mock.method(await getFileHandlePrototype(), 'sync', () =>
+		context.mock.method(await getFileHandlePrototype(), 'sync', () =>
 			Promise.reject(new Error('the disk failed')),
 		);
 
@@ -136,9 +136,9 @@ describe('writeSaltKey', () => {
 
 	// A handle carries its close method itself rather than from its prototype, so
 	// the method is replaced on the handle that writes the key.
-	it('removes a key that it could not write completely, even if closing it fails', async test => {
+	it('removes a key that it could not write completely, even if closing it fails', async context => {
 		const filePath = getTemporaryPath('merkle.key');
-		test.mock.method(await getFileHandlePrototype(), 'sync', function (this: FileHandle) {
+		context.mock.method(await getFileHandlePrototype(), 'sync', function (this: FileHandle) {
 			const close = this.close.bind(this);
 			this.close = async () => {
 				await close();
