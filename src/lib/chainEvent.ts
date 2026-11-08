@@ -1,5 +1,5 @@
 import { type Event, HashVerificationFailedError } from 'eventsourcingdb';
-import { parseEventId } from './eventId.js';
+import { parseEventId, parseStoredEventId } from './eventId.js';
 import { assertKnownHashVersion, calculateEventHash } from './hash.js';
 import type { BackupEntry, CloudEvent } from './types.js';
 
@@ -69,13 +69,13 @@ export const fromDatabaseEvent = (event: Event): ChainEvent => {
 	};
 };
 
-// findEventById compares IDs as numbers, as EventSourcingDB reads them, so that
-// an ID in another notation of the same number finds the event.
+// findEventById finds the event that a given ID names. It compares the IDs as
+// numbers, since a source can hold an ID in another notation of its number.
 export const findEventById = (events: ChainEvent[], eventId: string): ChainEvent | undefined => {
 	const wanted = parseEventId(eventId);
 	if (wanted === undefined) {
 		return undefined;
 	}
 
-	return events.find(event => parseEventId(event.id) === wanted);
+	return events.find(event => parseStoredEventId(event.id) === wanted);
 };

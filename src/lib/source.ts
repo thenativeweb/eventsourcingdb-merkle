@@ -7,7 +7,7 @@ import {
 	fromDatabaseEvent,
 } from './chainEvent.js';
 import { readDatabase } from './databaseReader.js';
-import { parseEventId } from './eventId.js';
+import { parseEventId, parseStoredEventId } from './eventId.js';
 
 // The flags that name where a command reads its events from: a backup, or a
 // running database with its API token. The token is taken as a flag only, as
@@ -75,7 +75,7 @@ export const readEvents = async (
 
 	const last = parseEventId(lastEventId);
 	const index =
-		last === undefined ? -1 : events.findIndex(event => parseEventId(event.id) === last);
+		last === undefined ? -1 : events.findIndex(event => parseStoredEventId(event.id) === last);
 	if (index === -1) {
 		throw new Error(`the ${source.type} holds no event with ID ${lastEventId}`);
 	}
