@@ -150,11 +150,11 @@ describe('reading a running database', () => {
 		assert.strictEqual(output, '✗ Event with ID 9 not found\n');
 	});
 
-	it('takes an event ID in another notation of the same number, as for a backup', () => {
+	it('reports an event ID in another notation of the same number as not found, as for a backup', () => {
 		const { output, exitCode } = run(['validate-event-hash', ...source, '--event-id=03']);
 
-		assert.strictEqual(exitCode, 0, output);
-		assert.ok(output.startsWith('✓ Hash is valid\nEvent ID: 3\n'), output);
+		assert.strictEqual(exitCode, 1);
+		assert.strictEqual(output, '✗ Event with ID 03 not found\n');
 	});
 
 	it('reports an event ID that names no number as not found, as for a backup', () => {

@@ -14,10 +14,18 @@ describe('findEventById', () => {
 		assert.strictEqual(event.id, '2');
 	});
 
-	it('finds an event by its ID in another notation of the same number', async () => {
+	it('does not find an event by an ID in another notation of the same number', async () => {
 		const events = (await readBackupFile('test-fixtures/test-backup.json')).map(fromBackupEntry);
 
-		assert.strictEqual(findEventById(events, '02')?.id, '2');
+		assert.strictEqual(findEventById(events, '02'), undefined);
+	});
+
+	it('finds an event whose stored ID is in another notation of the same number', async () => {
+		const events = (await readBackupFile('test-fixtures/test-backup.json'))
+			.map(fromBackupEntry)
+			.map(event => ({ ...event, id: event.id.padStart(2, '0') }));
+
+		assert.strictEqual(findEventById(events, '2')?.id, '02');
 	});
 
 	it('returns undefined for non-existent ID', async () => {

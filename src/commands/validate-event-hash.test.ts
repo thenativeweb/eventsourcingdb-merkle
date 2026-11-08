@@ -245,13 +245,19 @@ describe('validate-event-hash', () => {
 			);
 		});
 
-		it('takes an event ID in another notation of the same number, as EventSourcingDB does', () => {
-			const output = execSync(
-				'node ./dist/index.js validate-event-hash --backup test-fixtures/backup-with-both-hash-versions.ndjson --event-id 03',
-				{ encoding: 'utf-8' },
+		it('reports an event ID in another notation of the same number as not found', () => {
+			assert.throws(
+				() => {
+					execSync(
+						'node ./dist/index.js validate-event-hash --backup test-fixtures/backup-with-both-hash-versions.ndjson --event-id 03',
+						{ encoding: 'utf-8', stdio: 'pipe' },
+					);
+				},
+				(error: Error & { stdout?: string }) => {
+					assert.strictEqual(error.stdout, '✗ Event with ID 03 not found\n');
+					return true;
+				},
 			);
-			// biome-ignore lint/performance/useTopLevelRegex: Regex literals inline are acceptable in test files
-			assert.match(output, /✓ Hash is valid\nEvent ID: 3\n/u);
 		});
 
 		it('validates the hash of an event of either version from a backup', () => {
