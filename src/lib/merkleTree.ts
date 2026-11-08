@@ -1,3 +1,4 @@
+import { isEventId } from './eventId.js';
 import { isKnownStoredHash } from './hash.js';
 import { isObject } from './isObject.js';
 import {
@@ -155,14 +156,6 @@ const isSiblingWithSide =
 		isObject(sibling) &&
 		isHash(sibling.hash) &&
 		(sibling.position === 'left' || sibling.position === 'right');
-
-// An ID in a proof of version 3 is written as EventSourcingDB writes IDs, since
-// get-proof writes it rather than anyone typing it, so that the same proof has
-// one notation only.
-const eventIdPattern = /^(0|[1-9][0-9]*)$/u;
-
-const isEventId = (value: unknown): boolean =>
-	typeof value === 'string' && eventIdPattern.test(value);
 
 // findProofStructureProblem describes what keeps a proof from being one that
 // can be verified, or returns undefined if nothing does. Which fields a proof may

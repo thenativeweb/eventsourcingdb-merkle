@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { access } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
-import { parseEventId } from './eventId.js';
+import { parseStoredEventId } from './eventId.js';
 import { isObject } from './isObject.js';
 import { getCompactValue, getRawValue } from './rawJson.js';
 import type { BackupEntry, CloudEvent } from './types.js';
@@ -275,8 +275,8 @@ const createV2Reader = (): FormatReader => {
 
 // isSameEvent tells whether the anchor that an increment names, as its backup
 // line holds it, is the event that the part before it ended at, by its ID as a
-// number, since creating a backup takes the ID in any notation that
-// EventSourcingDB reads, and by its hash. An anchor of null names no event, and
+// number, since creating a backup took the ID in any notation up to
+// EventSourcingDB 1.2, and by its hash. An anchor of null names no event, and
 // follows on a part that ended at none, such as a full backup of an empty store.
 // Any other anchor that does not name an event by its ID and hash follows on
 // nothing.
@@ -292,7 +292,9 @@ const isSameEvent = (anchor: unknown, endedAt: AnchorEvent | undefined): boolean
 	if (typeof id !== 'string' || typeof hash !== 'string') {
 		return false;
 	}
-	const anchorId = parseEventId(id);
+	const anchorId = parseStoredEventId(id);
 
-	return anchorId !== undefined && anchorId === parseEventId(endedAt.id) && hash === endedAt.hash;
+	return (
+		anchorId !== undefined && anchorId === parseStoredEventId(endedAt.id) && hash === endedAt.hash
+	);
 };

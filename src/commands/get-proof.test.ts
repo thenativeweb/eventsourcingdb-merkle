@@ -145,7 +145,7 @@ describe('get-proof', () => {
 			assert.strictEqual(run('verify-proof', [output]).exitCode, 0);
 		});
 
-		it('takes an event ID in another notation of the same number, as EventSourcingDB does', () => {
+		it('reports an event ID in another notation of the same number as not found', () => {
 			const { output, exitCode } = run('get-proof', [
 				backup,
 				'--event-id=01',
@@ -153,8 +153,8 @@ describe('get-proof', () => {
 				'--json',
 			]);
 
-			assert.strictEqual(exitCode, 0, output);
-			assert.strictEqual((JSON.parse(output) as { eventId: string }).eventId, '1');
+			assert.strictEqual(exitCode, 1);
+			assert.strictEqual(output, '✗ Event with ID 01 not found\n');
 		});
 
 		it('refuses a last event ID that is no event ID', () => {

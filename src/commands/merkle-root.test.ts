@@ -310,16 +310,7 @@ describe('merkle-root', () => {
 			assert.strictEqual(newer.output, older.output);
 		});
 
-		it('takes a last event ID in another notation of the same number, as EventSourcingDB does', () => {
-			const backup = '--backup=test-fixtures/backup-with-both-hash-versions.ndjson';
-
-			assert.strictEqual(
-				run([backup, '--last-event-id=01']).output,
-				run([backup, '--last-event-id=1']).output,
-			);
-		});
-
-		for (const lastEventId of ['abc', '']) {
+		for (const lastEventId of ['abc', '', '01', '+1', '-1']) {
 			it(`refuses a last event ID that is no event ID, such as '${lastEventId}'`, () => {
 				const { output, exitCode } = run([
 					'--backup=test-fixtures/backup-with-both-hash-versions.ndjson',
