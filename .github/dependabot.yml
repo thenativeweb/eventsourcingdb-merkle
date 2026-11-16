@@ -34,7 +34,7 @@ updates:
           - patch
 
   - package-ecosystem: docker
-    directory: "/.github/node"
+    directory: "/docker/node"
     cooldown:
       default-days: 7
     schedule:
