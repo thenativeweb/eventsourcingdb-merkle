@@ -17,8 +17,8 @@
 		"commands": "./dist/commands"
 	},
 	"dependencies": {
-		"@oclif/core": "5.1.11",
-		"eventsourcingdb": "2.2.3"
+		"@oclif/core": "5.1.12",
+		"eventsourcingdb": "2.3.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.6.7",
