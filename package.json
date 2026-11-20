@@ -1,6 +1,6 @@
 {
 	"name": "eventsourcingdb-merkle",
-	"version": "4.0.8",
+	"version": "4.0.9",
 	"description": "Merkle tree utilities for EventSourcingDB backups and databases.",
 	"author": {
 		"name": "the native web GmbH",
@@ -17,11 +17,11 @@
 		"commands": "./dist/commands"
 	},
 	"dependencies": {
-		"@oclif/core": "5.1.11",
-		"eventsourcingdb": "2.2.3"
+		"@oclif/core": "5.1.12",
+		"eventsourcingdb": "2.3.1"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.6.5",
+		"@biomejs/biome": "2.6.7",
 		"@types/node": "26.6.6",
 		"tsx": "4.23.15",
 		"typescript": "7.0.2"
